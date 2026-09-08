@@ -86,6 +86,7 @@ void Display::showReceiveRoute()
     canvas.drawString("SWIPE LEFT TO EXIT", canvas.width() / 2, 305);
 }
 
+/*
 void Display::showPowerOff()
 {
     showingRoute = false;
@@ -102,6 +103,7 @@ void Display::showPowerOff()
 
     return;
 }
+    */
 
 void Display::onFadeBackLight()
 {

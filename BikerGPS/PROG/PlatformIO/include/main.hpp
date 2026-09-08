@@ -8,15 +8,15 @@
 #include "route.hpp"
 #include "ble.hpp"
 #include "gps.hpp"
+#include "button.hpp"
 
 #define BLE_TIMEOUT 60000
 #define SCROLLER_TIMEOUT 10000
 #define DISPLAY_DIM_TIMEOUT 300000  // 5 minutes
 #define DISPLAY_OFF_TIMEOUT 1500000 // 15 minutes
-#define POWER_OFF_TIME_OUT 5000
+#define POWER_OFF_TIME_OUT 3000
 //#define PERIPHERAL_CONTROL_PIN 15
 #define BUTTON_PIN  0
-#define SLEEP_HOLD_TIME_MS 3000 // 3 seconds
 #define WAKE_HOLD_TIME_MS 1000 // 1 second (we already have initial delay)
 
 enum class AppState : uint8_t
@@ -50,6 +50,7 @@ AppState previousAppState = AppState::NONE;
 PowerState currentPowerState = PowerState::DISPLAY_ON;
 PowerState previousPowerState = PowerState::NONE;
 TouchData touching;
+bool btnPressed;
 unsigned long bleTimeOut;
 unsigned long scrollerTimeOut;
 unsigned long displayTimeOut;

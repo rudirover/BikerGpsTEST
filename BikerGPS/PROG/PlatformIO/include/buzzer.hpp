@@ -24,8 +24,8 @@ public:
 
 private:
     bool beeping = false;
-unsigned long beepTimer;   
-int beepCount; 
+    unsigned long beepTimer;
+    int beepCount;
 };
 
 extern Buzzer buzzer;

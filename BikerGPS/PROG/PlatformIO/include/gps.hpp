@@ -5,11 +5,11 @@
 #include <TinyGPSPlus.h>
 #include "buzzer.hpp"
 
-#define SIMULATION 
+//#define SIMULATION 
 
-#define GPS_RX_PIN 43
-#define GPS_TX_PIN 44
-#define GPS_ENABLE_PIN 2
+#define GPS_RX_PIN 17
+#define GPS_TX_PIN 18
+//#define GPS_ENABLE_PIN 2
 #define GPS_BAUD_RATE 9600
 #define GPS_TICKTIME 1000
 #define GPS_ENABLE_PIN 2

@@ -111,7 +111,7 @@ public:
     void showNoRoute();
     void showReceiveRoute();
     void showRoute();
-    void showPowerOff();
+    //void showPowerOff();
     void fadeBackLight(uint8_t backLightLevel);
     void setBackLight(uint8_t backLightLevel);
     void scrollUp(int speed = SLOW_SCROLL_SPEED);

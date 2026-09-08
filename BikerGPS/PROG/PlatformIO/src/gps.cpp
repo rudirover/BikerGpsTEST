@@ -9,12 +9,10 @@ Gps::Gps() {};
 Gps::Gps() : gpsComm(1) {};
 #endif
 
-// Gps::Gps() {};
-
 void Gps::init()
 {
-  pinMode(GPS_ENABLE_PIN, OUTPUT);
-  digitalWrite(GPS_ENABLE_PIN, HIGH);
+  //pinMode(GPS_ENABLE_PIN, OUTPUT);
+  //digitalWrite(GPS_ENABLE_PIN, HIGH);
 
   tickTime = millis();
   hasValidLocation = false;
@@ -25,6 +23,8 @@ void Gps::init()
 #else
   gpsComm.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial.printf("[GPS] ATGM336H started on RX=%d TX=%d at %d baud\n", GPS_RX_PIN, GPS_TX_PIN, GPS_BAUD_RATE);
+  //gpsComm.print("$PMTK104*37\r\n"); // complete factory reset
+  gpsComm.print("xxx"); // dummy to wake up
 #endif
 
   initialized = true;
@@ -52,6 +52,8 @@ void Gps::run()
   }
 #else
   // 2. Read all available serial bytes continuously
+      //Serial.print("Bytes available from GPS = ");
+      //Serial.println(gpsComm.available());
   while (gpsComm.available() > 0)
   // while (Serial.available() > 0)
   {
@@ -106,7 +108,7 @@ void Gps::run()
     }
     else
     {
-      //DBG_EXT(DBG_INFO, " Waiting for valid gps fix...");
+      DBG_EXT(DBG_INFO, " Waiting for valid gps fix...");
       //buzzer.tptBeep();
 
     }
@@ -157,5 +159,5 @@ bool Gps::initDone()
 
 void Gps::sleep()
 {
-  digitalWrite(GPS_ENABLE_PIN, LOW);
+  gpsComm.print("$PMTK161,0*28\r\n");
 }

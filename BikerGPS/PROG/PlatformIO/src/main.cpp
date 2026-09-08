@@ -11,11 +11,11 @@ void setup()
     Serial.begin(115200);
     Serial.setDebugOutput(false);
     Debug.formatTimestampOn();
-    Debug.setDebugLevel(DBG_INFO);
+    Debug.setDebugLevel(DBG_DEBUG);
     delay(2000);
     pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-    //wakeUp();
+    // wakeUp();
 
     DBG_EXT(DBG_INFO, " ===== BOOT =====");
     DBG_EXT(DBG_INFO, "Power rails enabled");
@@ -37,7 +37,10 @@ void setup()
     DBG_EXT(DBG_INFO, "Gps initialized");
 
     buzzer.init();
-    DBG_EXT(DBG_INFO, "Buzzer initialized");    
+    DBG_EXT(DBG_INFO, "Buzzer initialized");
+
+    button.init();
+    DBG_EXT(DBG_INFO, "Button initialized");
 }
 
 void loop()
@@ -49,15 +52,16 @@ void loop()
     buzzer.run();
 
     touching = touch.getTouch();
+    btnPressed = button.isPressed();
 
     IF_DBG(DBG_DEBUG)
     {
         static TouchData oldTouch;
         if (oldTouch.gesture != touching.gesture)
         {
-            DBG_EXT(DBG_DEBUG, "===== GETTOUCH =====");
-            DBG_EXT(DBG_DEBUG, "gesture = %d", (int)touching.gesture);
-            DBG_EXT(DBG_DEBUG, "fingerNum = %d", touching.fingerCount);
+            // DBG_EXT(DBG_DEBUG, "===== GETTOUCH =====");
+            // DBG_EXT(DBG_DEBUG, "gesture = %d", (int)touching.gesture);
+            // DBG_EXT(DBG_DEBUG, "fingerNum = %d", touching.fingerCount);
             oldTouch = touching;
         }
     }
@@ -158,13 +162,13 @@ void executePowerState(PowerState state)
     {
     case PowerState::NONE:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "PowerState::NONE");
+            DBG_EXT(DBG_DEBUG, "PowerState::NONE");
         /* code */
         break;
 
     case PowerState::DISPLAY_ON:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "PowerState::DISPLAY_ON");
+            DBG_EXT(DBG_DEBUG, "PowerState::DISPLAY_ON");
         /* code */
         if (touching.gesture != GestureType::GESTURE_NONE)
         {
@@ -183,7 +187,7 @@ void executePowerState(PowerState state)
 
     case PowerState::DISPLAY_DIM:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "PowerState::DISPLAY_DIM");
+            DBG_EXT(DBG_DEBUG, "PowerState::DISPLAY_DIM");
         /* code */
         if (((millis() - displayTimeOut) > DISPLAY_OFF_TIMEOUT) && (currentAppState == AppState::MANAGE_ROUTE))
         {
@@ -197,7 +201,7 @@ void executePowerState(PowerState state)
 
     case PowerState::DISPLAY_OFF:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "PowerState::DISPLAY_OFF");
+            DBG_EXT(DBG_DEBUG, "PowerState::DISPLAY_OFF");
         /* code */
         if (touching.gesture == GestureType::GESTURE_SINGLE_TAP)
         {
@@ -207,7 +211,7 @@ void executePowerState(PowerState state)
 
     case PowerState::POWER_OFF:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "PowerState::POWER_OFF");
+            DBG_EXT(DBG_DEBUG, "PowerState::POWER_OFF");
         /* code */
         gotoSleep();
         break;
@@ -238,7 +242,7 @@ void runApp()
 
 void enterAppState(AppState state)
 {
-    //flushTouch();
+    // flushTouch();
     switch (state)
     {
     case AppState::NONE:
@@ -310,13 +314,12 @@ void enterAppState(AppState state)
     case AppState::REQ_POWER_OFF:
         DBG_EXT(DBG_DEBUG, "AppState::REQ_POWER_OFF");
         /* code */
-        display.showPowerOff();
+        powerOffTimeOut = millis();
         break;
 
     case AppState::ACK_POWER_OFF:
         DBG_EXT(DBG_DEBUG, "AppState::ACK_POWER_OFF");
         /* code */
-        powerOffTimeOut = millis();
         break;
 
     default:
@@ -407,14 +410,14 @@ void executeAppState(AppState state)
     {
     case AppState::NONE:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "AppState::NONE");
+            DBG_EXT(DBG_DEBUG, "AppState::NONE");
         /* code */
         changeAppState(AppState::BOOT_DONE);
         break;
 
     case AppState::BOOT_DONE:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE");
+            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE");
         /* code */
         if (route.exists())
         {
@@ -424,7 +427,7 @@ void executeAppState(AppState state)
         }
         else
         {
-            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > NO_SAVED_ROUTE_EXISTS");            
+            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > NO_SAVED_ROUTE_EXISTS");
             changeAppState(AppState::NO_SAVED_ROUTE_EXISTS);
             break;
         }
@@ -432,11 +435,11 @@ void executeAppState(AppState state)
 
     case AppState::NO_SAVED_ROUTE_EXISTS:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "AppState::NO_ROUTE_EXISTS");
+            DBG_EXT(DBG_DEBUG, "AppState::NO_ROUTE_EXISTS");
         /* code */
         if (touching.gesture == GestureType::GESTURE_SWIPE_RIGHT)
         {
-            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > SWIPE_RIGHT");            
+            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > SWIPE_RIGHT");
             changeAppState(AppState::BLE_RECEIVE_ROUTE);
             break;
         }
@@ -444,23 +447,23 @@ void executeAppState(AppState state)
 
     case AppState::BLE_RECEIVE_ROUTE:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "AppState::BLE_RECEIVE_ROUTE");
+            DBG_EXT(DBG_DEBUG, "AppState::BLE_RECEIVE_ROUTE");
         /* code */
         if (((millis() - bleTimeOut) > BLE_TIMEOUT) && !ble.deviceConnected)
         {
-            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > BLE_TIMEOUT");            
+            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > BLE_TIMEOUT");
             changeAppState(AppState::BOOT_DONE);
             break;
         }
         if (touching.gesture == GestureType::GESTURE_SWIPE_LEFT)
         {
-            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > SWIPE_LEFT");            
+            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > SWIPE_LEFT");
             changeAppState(AppState::BOOT_DONE);
             break;
         }
         if (ble.routeAvailable)
         {
-            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > BLE_ROUTE_AVAILABLE");            
+            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > BLE_ROUTE_AVAILABLE");
             changeAppState(AppState::BLE_ROUTE_RECEIVED);
             break;
         }
@@ -468,21 +471,21 @@ void executeAppState(AppState state)
 
     case AppState::BLE_ROUTE_RECEIVED:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "AppState::BLE_ROUTE_RECEIVED");
+            DBG_EXT(DBG_DEBUG, "AppState::BLE_ROUTE_RECEIVED");
         /* code */
         changeAppState(AppState::SAVED_ROUTE_EXISTS);
         break;
 
     case AppState::SAVED_ROUTE_EXISTS:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "AppState::SAVED_ROUTE_EXISTS");
+            DBG_EXT(DBG_DEBUG, "AppState::SAVED_ROUTE_EXISTS");
         /* code */
         changeAppState(AppState::MANAGE_ROUTE);
         break;
 
     case AppState::MANAGE_ROUTE:
         if (oldState != state)
-        DBG_EXT(DBG_DEBUG, "AppState::MANAGE_ROUTE");
+            DBG_EXT(DBG_DEBUG, "AppState::MANAGE_ROUTE");
         /* code */
         if (touching.gesture == GestureType::GESTURE_SWIPE_RIGHT)
         {
@@ -512,9 +515,9 @@ void executeAppState(AppState state)
             break;
         }
 
-        if ((touching.gesture == GestureType::GESTURE_BUTTON_TAP) /*&& (touching.y > 300)*/)
+        if (btnPressed)
         {
-            DBG_EXT(DBG_DEBUG, "AppState::MANAGE_ROUTE - > BUTTON_TAP");
+            DBG_EXT(DBG_DEBUG, "AppState::MANAGE_ROUTE - > BUTTON_PRESSED");
             changeAppState(AppState::REQ_POWER_OFF);
             break;
         }
@@ -523,7 +526,7 @@ void executeAppState(AppState state)
         {
             if ((millis() - scrollerTimeOut) >= SCROLLER_TIMEOUT)
             {
-            DBG_EXT(DBG_DEBUG, "AppState::MANAGE_ROUTE - > SCROLLER_TIMEOUT");
+                DBG_EXT(DBG_DEBUG, "AppState::MANAGE_ROUTE - > SCROLLER_TIMEOUT");
                 changeAppState(AppState::SCROLL_INTO_VIEW);
             }
             break;
@@ -565,22 +568,25 @@ void executeAppState(AppState state)
         if (oldState != state)
             DBG_EXT(DBG_DEBUG, "AppState::REQ_POWER_OFF");
         /* code */
-        changeAppState(AppState::ACK_POWER_OFF);
+        if (!btnPressed)
+        {
+            changeAppState(AppState::MANAGE_ROUTE);
+            break;
+        }
+        if ((millis() - powerOffTimeOut) >= POWER_OFF_TIME_OUT)
+        {
+            buzzer.btnBeep();
+            changeAppState(AppState::ACK_POWER_OFF);
+            break;
+        }
         break;
 
     case AppState::ACK_POWER_OFF:
         if (oldState != state)
             DBG_EXT(DBG_DEBUG, "AppState::ACK_POWER_OFF");
         /* code */
-        if ((millis() - powerOffTimeOut) >= POWER_OFF_TIME_OUT)
+        if (!btnPressed)
         {
-            DBG_EXT(DBG_DEBUG, "AppState::ACK_POWER_OFF -> POWER_OFF_TIME_OUT");
-            changeAppState(AppState::MANAGE_ROUTE);
-            break;
-        }
-        if (touching.gesture == GestureType::GESTURE_BUTTON_TAP)
-        {
-            DBG_EXT(DBG_DEBUG, "AppState::ACK_POWER_OFF -> BUTTON_TAP");
             changePowerState(PowerState::POWER_OFF);
             break;
         }
@@ -599,13 +605,13 @@ void changeAppState(AppState state)
 
 void gotoSleep()
 {
-            Serial.flush();
+    Serial.flush();
 
-            rtc_gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-            rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_PIN);
-            esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
-            esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
-            esp_deep_sleep_start();         
+    rtc_gpio_pullup_en((gpio_num_t)BUTTON_PIN);
+    rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_PIN);
+    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
+    esp_deep_sleep_start();
 }
 
 void wakeUp()
@@ -659,6 +665,6 @@ void wakeUp()
     rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_PIN);
 
     // Configure EXT0 wakeup source for the next sleep cycle (0 = LOW level)
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);   
-    */ 
+    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
+    */
 }
