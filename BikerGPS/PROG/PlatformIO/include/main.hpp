@@ -14,10 +14,10 @@
 #define SCROLLER_TIMEOUT 10000
 #define DISPLAY_DIM_TIMEOUT 300000  // 5 minutes
 #define DISPLAY_OFF_TIMEOUT 1500000 // 15 minutes
-#define POWER_OFF_TIME_OUT 3000
+#define POWEROFF_HOLDTIME_MS 3000
 //#define PERIPHERAL_CONTROL_PIN 15
 #define BUTTON_PIN  0
-#define WAKE_HOLD_TIME_MS 1000 // 1 second (we already have initial delay)
+#define POWERON_HOLDTIME_MS 1000 // 1 second (we already have initial delay)
 
 enum class AppState : uint8_t
 {
@@ -55,7 +55,6 @@ unsigned long bleTimeOut;
 unsigned long scrollerTimeOut;
 unsigned long displayTimeOut;
 unsigned long powerOffTimeOut;
-bool waitingForFirstRelease = false;
 void runPower();
 void exitPowerState(PowerState state);
 void enterPowerState(PowerState state);
@@ -66,6 +65,5 @@ void exitAppState(AppState state);
 void enterAppState(AppState state);
 void executeAppState(AppState state);
 void changeAppState(AppState state);
-void wakeUp();
-void gotoSleep();
-//void flushTouch();
+void powerOn();
+void powerOff();

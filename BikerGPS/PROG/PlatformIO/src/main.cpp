@@ -13,9 +13,11 @@ void setup()
     Debug.formatTimestampOn();
     Debug.setDebugLevel(DBG_DEBUG);
     delay(2000);
-    pinMode(BUTTON_PIN, INPUT_PULLUP);
 
-    // wakeUp();
+    button.init();
+    DBG_EXT(DBG_INFO, "Button initialized");
+    powerOn();
+    buzzer.btnBeep();
 
     DBG_EXT(DBG_INFO, " ===== BOOT =====");
     DBG_EXT(DBG_INFO, "Power rails enabled");
@@ -38,9 +40,6 @@ void setup()
 
     buzzer.init();
     DBG_EXT(DBG_INFO, "Buzzer initialized");
-
-    button.init();
-    DBG_EXT(DBG_INFO, "Button initialized");
 }
 
 void loop()
@@ -213,7 +212,7 @@ void executePowerState(PowerState state)
         if (oldState != state)
             DBG_EXT(DBG_DEBUG, "PowerState::POWER_OFF");
         /* code */
-        gotoSleep();
+        powerOff();
         break;
 
     default:
@@ -573,9 +572,10 @@ void executeAppState(AppState state)
             changeAppState(AppState::MANAGE_ROUTE);
             break;
         }
-        if ((millis() - powerOffTimeOut) >= POWER_OFF_TIME_OUT)
+        if ((millis() - powerOffTimeOut) >= POWEROFF_HOLDTIME_MS)
         {
             buzzer.btnBeep();
+            display.setBackLight(0);
             changeAppState(AppState::ACK_POWER_OFF);
             break;
         }
@@ -603,9 +603,11 @@ void changeAppState(AppState state)
     currentAppState = state;
 }
 
-void gotoSleep()
+void powerOff()
 {
     Serial.flush();
+    display.sleep();
+    gps.sleep();
 
     rtc_gpio_pullup_en((gpio_num_t)BUTTON_PIN);
     rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_PIN);
@@ -614,7 +616,7 @@ void gotoSleep()
     esp_deep_sleep_start();
 }
 
-void wakeUp()
+void powerOn()
 {
     // Check why we booted up
     esp_sleep_wakeup_cause_t wakeup_reason = esp_sleep_get_wakeup_cause();
@@ -623,11 +625,12 @@ void wakeUp()
     {
         unsigned long startTime = millis();
         bool heldForThreeSeconds = false;
-
+        while (!button.isPressed())
+            ;
         // Check if the button remains held down for 3 seconds upon waking
-        while (digitalRead(BUTTON_PIN) == LOW)
+        while (button.isPressed())
         {
-            if (millis() - startTime >= WAKE_HOLD_TIME_MS)
+            if (millis() - startTime >= POWERON_HOLDTIME_MS)
             {
                 heldForThreeSeconds = true;
                 break;
@@ -638,33 +641,8 @@ void wakeUp()
         // If released early, go right back to sleep safely
         if (!heldForThreeSeconds)
         {
-            gotoSleep();
             Serial.println("Released too early. Returning to deep sleep.");
-        }
-        else
-        {
-            Serial.println("Woke up! Held for 3 seconds.");
-            // Successfully woke up! Proceed straight to boot without blocking,
-            // but flag that we need to see a button release first in the loop.
-            waitingForFirstRelease = true;
+            powerOff();
         }
     }
-    else
-    {
-        Serial.println("Fresh boot or reset.");
-        waitingForFirstRelease = false;
-    }
-
-    /*
-
-    // Clear any lingering wakeup configurations
-    esp_sleep_disable_wakeup_source(ESP_SLEEP_WAKEUP_ALL);
-
-    // Ensure RTC pull-up is active for deep sleep state
-    rtc_gpio_pullup_en((gpio_num_t)BUTTON_PIN);
-    rtc_gpio_pulldown_dis((gpio_num_t)BUTTON_PIN);
-
-    // Configure EXT0 wakeup source for the next sleep cycle (0 = LOW level)
-    esp_sleep_enable_ext0_wakeup((gpio_num_t)BUTTON_PIN, 0);
-    */
 }
