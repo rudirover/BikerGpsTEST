@@ -11,8 +11,18 @@ Gps::Gps() : gpsComm(1) {};
 
 void Gps::init()
 {
-  //pinMode(GPS_ENABLE_PIN, OUTPUT);
-  //digitalWrite(GPS_ENABLE_PIN, HIGH);
+  gpio_hold_dis((gpio_num_t)GPS_ENABLE_PIN);
+
+  // 2. TURN POWER ON: Driving the NPN Base HIGH connects the GPS ground to system ground
+  pinMode(GPS_ENABLE_PIN, OUTPUT);
+  digitalWrite(GPS_ENABLE_PIN, HIGH); 
+  
+  // 3. Re-initialize your serial port pins to talk to the module
+  pinMode(GPS_RX_PIN, INPUT);
+  pinMode(GPS_TX_PIN, OUTPUT);
+
+  // Give the ATGM336H 200ms to boot its radio frontend before sending commands
+  delay(200); 
 
   tickTime = millis();
   hasValidLocation = false;
@@ -23,7 +33,6 @@ void Gps::init()
 #else
   gpsComm.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
   Serial.printf("[GPS] ATGM336H started on RX=%d TX=%d at %d baud\n", GPS_RX_PIN, GPS_TX_PIN, GPS_BAUD_RATE);
-  //gpsComm.print("$PMTK104*37\r\n"); // complete factory reset
   gpsComm.print("xxx"); // dummy to wake up
 #endif
 
@@ -159,5 +168,17 @@ bool Gps::initDone()
 
 void Gps::sleep()
 {
-  gpsComm.print("$PMTK161,0*28\r\n");
+  // 1. TURN POWER OFF: Driving the NPN Base LOW breaks the ground connection (0mA draw)
+  pinMode(GPS_ENABLE_PIN, OUTPUT);
+  digitalWrite(GPS_ENABLE_PIN, LOW);
+
+  // 2. CRUCIAL FOR LOW-SIDE SWITCHING: Disconnect UART pins!
+  // Because the GPS ground is floating, if the ESP32 keeps its TX pin HIGH, 
+  // current will flow backward through the serial lines and "phantom power" the chip.
+  pinMode(GPS_RX_PIN, INPUT); 
+  pinMode(GPS_TX_PIN, INPUT);   
+
+  // 3. LOCK THE PIN LOW: Tell the ESP32-S3 to hold the pin LOW during deep sleep
+  gpio_hold_en((gpio_num_t)GPS_ENABLE_PIN);              
+  gpio_deep_sleep_hold_en(); 
 }

@@ -9,10 +9,9 @@
 
 #define GPS_RX_PIN 17
 #define GPS_TX_PIN 18
-//#define GPS_ENABLE_PIN 2
+#define GPS_ENABLE_PIN 2
 #define GPS_BAUD_RATE 9600
 #define GPS_TICKTIME 1000
-#define GPS_ENABLE_PIN 2
 #define MIN_VALID_COG_SPEED 3
 
 class Gps
