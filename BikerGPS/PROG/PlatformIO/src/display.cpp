@@ -297,7 +297,7 @@ void Display::drawDirectionDot()
         int posY = centerY - lround(cos(radians(heading)) * radius);
 
         sprite.fillCircle(posX, posY, OUTER_DOT_SIZE, TFT_WHITE);
-        if (!gps.hasValidCog && blinker)
+        if (!gps.cogIsAvailable() && blinker)
 
         {
             sprite.fillCircle(posX, posY, INNER_DOT_SIZE, TFT_BLACK);
@@ -335,7 +335,7 @@ void Display::drawWptDistanceBar()
 
 void Display::drawSatelliteFixBar()
 {
-    if (!gps.satelliteFix())
+    if (!gps.satellitesIsAvailable())
     {
         if (blinker)
         {

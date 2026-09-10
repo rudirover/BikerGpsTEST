@@ -20,25 +20,26 @@ public:
     Gps();
     void init();
     void run();
-    bool hasValidLocation;
-    bool hasValidCog;
+    void sleep();    
     double latitude;
     double longitude;
     double speedKmph;
     double cogDegrees;
     double bearing(double targetLat, double targetLon);
     double distance(double targetLat, double targetLon);
-    bool satelliteFix();
-    bool initDone();
-    void sleep();
+    bool satellitesIsAvailable();
+    bool locationIsAvailable();
+    bool courseIsAvailable();
+    bool speedIsAvailable();
+    bool cogIsAvailable();
 
 private:
 #ifndef SIMULATION
     HardwareSerial gpsComm;
 #endif
     TinyGPSPlus tinyGps;
+    bool cogValid = false;
     unsigned long tickTime = 0;
-    bool initialized = false;
 };
 
 extern Gps gps;

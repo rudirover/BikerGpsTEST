@@ -1,6 +1,5 @@
 #include "gps.hpp"
 
-
 Gps gps;
 
 #ifdef SIMULATION
@@ -15,18 +14,16 @@ void Gps::init()
 
   // 2. TURN POWER ON: Driving the NPN Base HIGH connects the GPS ground to system ground
   pinMode(GPS_ENABLE_PIN, OUTPUT);
-  digitalWrite(GPS_ENABLE_PIN, HIGH); 
-  
+  digitalWrite(GPS_ENABLE_PIN, HIGH);
+
   // 3. Re-initialize your serial port pins to talk to the module
   pinMode(GPS_RX_PIN, INPUT);
   pinMode(GPS_TX_PIN, OUTPUT);
 
   // Give the ATGM336H 200ms to boot its radio frontend before sending commands
-  delay(200); 
+  delay(200);
 
   tickTime = millis();
-  hasValidLocation = false;
-  hasValidCog = false;
 
 #ifdef SIMULATION
   Serial.setRxBufferSize(1024);
@@ -36,7 +33,6 @@ void Gps::init()
   gpsComm.print("xxx"); // dummy to wake up
 #endif
 
-  initialized = true;
 }
 
 void Gps::run()
@@ -61,31 +57,28 @@ void Gps::run()
   }
 #else
   // 2. Read all available serial bytes continuously
-      //Serial.print("Bytes available from GPS = ");
-      //Serial.println(gpsComm.available());
+  // Serial.print("Bytes available from GPS = ");
+  // Serial.println(gpsComm.available());
   while (gpsComm.available() > 0)
   // while (Serial.available() > 0)
   {
     tinyGps.encode(gpsComm.read());
   }
 
-  if (tinyGps.failedChecksum()) Serial.println("Checksum failed!!!!!");
+  if (tinyGps.failedChecksum())
+    Serial.println("Checksum failed!!!!!");
 
   // 3. Update state IMMEDIATELY when TinyGPS finishes decoding a field
-  if (tinyGps.location.isUpdated())
+  if (tinyGps.location.isUpdated() && tinyGps.location.isValid())
   {
-    hasValidLocation = tinyGps.location.isValid();
-    if (hasValidLocation)
-    {
-      latitude = tinyGps.location.lat();
-      longitude = tinyGps.location.lng();
-    }
+    latitude = tinyGps.location.lat();
+    longitude = tinyGps.location.lng();
   }
 #endif
 
-  if (tinyGps.speed.isUpdated())
+  if (tinyGps.speed.isUpdated() && tinyGps.speed.isValid())
   {
-    speedKmph = tinyGps.speed.isValid() ? tinyGps.speed.kmph() : 0.0;
+    speedKmph = tinyGps.speed.kmph();
   }
 
   if (tinyGps.course.isUpdated())
@@ -93,11 +86,11 @@ void Gps::run()
     if (tinyGps.course.isValid() && speedKmph >= MIN_VALID_COG_SPEED)
     {
       cogDegrees = tinyGps.course.deg();
-      hasValidCog = true;
+      cogValid = true;
     }
     else
     {
-      hasValidCog = false;
+      cogValid = false;
     }
   }
 
@@ -105,21 +98,20 @@ void Gps::run()
   if ((millis() - tickTime) >= 1000)
   {
     tickTime = millis();
-
-    if (hasValidLocation)
+    if (tinyGps.satellites.value() !=0)
     {
-      Serial.printf("[GPS] Lat: %.6f, Lng: %.6f, Speed: %.2f km/h, COG: %s, Sats: %d\n",
+      Serial.printf("[GPS] Lat: %.6f, Lng: %.6f, Speed: %.2f km/h, COG: %s, Sats: %d, SatFix: %d\n",
                     latitude,
                     longitude,
                     speedKmph,
-                    hasValidCog ? String(cogDegrees, 1).c_str() : "N/A",
-                    tinyGps.satellites.isValid() ? tinyGps.satellites.value() : 0);
+                    cogValid ? String(cogDegrees, 1).c_str() : "N/A",
+                    tinyGps.satellites.value(),
+                    tinyGps.satellites.isValid());
     }
     else
     {
       DBG_EXT(DBG_INFO, " Waiting for valid gps fix...");
-      //buzzer.tptBeep();
-
+      // buzzer.tptBeep();
     }
   }
 }
@@ -151,19 +143,34 @@ double Gps::bearing(double targetLat, double targetLon)
   return bearing;
 }
 
-bool Gps::satelliteFix()
+bool Gps::satellitesIsAvailable()
+{
+  return ((tinyGps.satellites.value() > 0) && (tinyGps.satellites.age() < 2000));
+}
+
+bool Gps::locationIsAvailable()
 {
   return tinyGps.location.isValid();
+}
+
+bool Gps::courseIsAvailable()
+{
+  return tinyGps.course.isValid();
+}
+
+bool Gps::speedIsAvailable()
+{
+  return tinyGps.speed.isValid();
+}
+
+bool Gps::cogIsAvailable()
+{
+  return cogValid;
 }
 
 double Gps::distance(double targetLat, double targetLon)
 {
   return tinyGps.distanceBetween(latitude, longitude, targetLat, targetLon);
-}
-
-bool Gps::initDone()
-{
-  return initialized;
 }
 
 void Gps::sleep()
@@ -173,12 +180,12 @@ void Gps::sleep()
   digitalWrite(GPS_ENABLE_PIN, LOW);
 
   // 2. CRUCIAL FOR LOW-SIDE SWITCHING: Disconnect UART pins!
-  // Because the GPS ground is floating, if the ESP32 keeps its TX pin HIGH, 
+  // Because the GPS ground is floating, if the ESP32 keeps its TX pin HIGH,
   // current will flow backward through the serial lines and "phantom power" the chip.
-  pinMode(GPS_RX_PIN, INPUT); 
-  pinMode(GPS_TX_PIN, INPUT);   
+  pinMode(GPS_RX_PIN, INPUT);
+  pinMode(GPS_TX_PIN, INPUT);
 
   // 3. LOCK THE PIN LOW: Tell the ESP32-S3 to hold the pin LOW during deep sleep
-  gpio_hold_en((gpio_num_t)GPS_ENABLE_PIN);              
-  gpio_deep_sleep_hold_en(); 
+  gpio_hold_en((gpio_num_t)GPS_ENABLE_PIN);
+  gpio_deep_sleep_hold_en();
 }
