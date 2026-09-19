@@ -29,8 +29,8 @@ void setup()
     touch.init();
     DBG_EXT(DBG_INFO, "Touch initialized");
 
-    route.init();
-    DBG_EXT(DBG_INFO, "Route initialized");
+    sdcard.init();
+    DBG_EXT(DBG_INFO, "SDCard initialized");    
 
     ble.init();
     DBG_EXT(DBG_INFO, "Ble initialized");
@@ -39,7 +39,12 @@ void setup()
     DBG_EXT(DBG_INFO, "Gps initialized");
 
     buzzer.init();
-    DBG_EXT(DBG_INFO, "Buzzer initialized");
+    DBG_EXT(DBG_INFO, "Buzzer initialized");    
+
+    route.init();
+    DBG_EXT(DBG_INFO, "Route initialized");
+
+
 }
 
 void loop()

@@ -5,12 +5,34 @@
 #include <math.h>
 #include "route.hpp"
 #include "gps.hpp"
+#include "sdcard.hpp"
 
 #define RGB565(r, g, b) ( \
     (((uint16_t)((r) & 0xF8)) << 8) | \
     (((uint16_t)((g) & 0xFC)) << 3) | \
     (((uint16_t)(b)) >> 3) \
 )
+/*
+            cfg.pin_sclk = 42;
+            cfg.pin_mosi = 39;
+            cfg.pin_miso = -1;
+            cfg.pin_dc = 41;
+            cfg.pin_cs = 40;
+            cfg.pin_rst = -1;
+            cfg.pin_busy = -1;            
+*/
+
+#define LCD_SCLK_PIN    42      // IO42_TFT_SCK
+#define LCD_MOSI_PIN    39      // IO39_TFT_SDA
+#define LCD_MISO_PIN    -1      // not connected
+#define LCD_DC_PIN      41      // IO41_TFT_RS
+#define LCD_CS_PIN      40      // IO40_TFT_CS 
+#define LCD_RST_PIN     -1      // not connected
+#define LCD_BUSY_PIN    -1      // not connected
+#define LCD_BK_PIN      38      // IO38_LED_BK
+#define LCD_SDA_PIN     15      // IO15_SDA  
+#define LCD_SCL_PIN     16      // IO15_SCL
+
 
 #define BACKLIGHT_ON_LEVEL          200
 #define BACKLIGHT_DIM_LEVEL         30
@@ -50,18 +72,18 @@ public:
             cfg.spi_3wire = false;
             cfg.use_lock = true;
             cfg.dma_channel = SPI_DMA_CH_AUTO;
-            cfg.pin_sclk = 42;
-            cfg.pin_mosi = 39;
-            cfg.pin_miso = -1;
-            cfg.pin_dc = 41;
+            cfg.pin_sclk = LCD_SCLK_PIN;
+            cfg.pin_mosi = LCD_MOSI_PIN;
+            cfg.pin_miso = LCD_MISO_PIN;
+            cfg.pin_dc = LCD_DC_PIN;
             _bus.config(cfg);
             _panel.setBus(&_bus);
         }
         {
             auto cfg = _panel.config();
-            cfg.pin_cs = 40;
-            cfg.pin_rst = -1;
-            cfg.pin_busy = -1;
+            cfg.pin_cs = LCD_CS_PIN;
+            cfg.pin_rst = LCD_RST_PIN;
+            cfg.pin_busy = LCD_BUSY_PIN;
             cfg.memory_width = 240;
             cfg.memory_height = 320;
             cfg.panel_width = 240;
@@ -78,7 +100,7 @@ public:
         {
             auto cfg = _backlight.config();
             cfg.freq = 5000;
-            cfg.pin_bl = 38;
+            cfg.pin_bl = LCD_BK_PIN;
             cfg.pwm_channel = 1;
             _backlight.config(cfg);
             _panel.setLight(&_backlight);
@@ -92,8 +114,8 @@ public:
             cfg.offset_rotation = 0;
             cfg.i2c_port = 0;
             cfg.i2c_addr = 0x38;
-            cfg.pin_sda = 15;
-            cfg.pin_scl = 16;
+            cfg.pin_sda = LCD_SDA_PIN;
+            cfg.pin_scl = LCD_SCL_PIN;
             cfg.freq = 400000;
             _touch.config(cfg);
             _panel.setTouch(&_touch);
