@@ -14,9 +14,12 @@ class SDCard
 public:
     SDCard();
     void init();
-
+    void write(const std::string &fileName, const std::string &payLoad);    
 private:
     SPIClass SDSpi = SPIClass(HSPI);
+    void read(String path, String data);
+
+
     void listDir(fs::FS & fs, const char *dirname, uint8_t levels);
 };
 

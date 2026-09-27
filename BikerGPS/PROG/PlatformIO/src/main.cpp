@@ -276,6 +276,7 @@ void enterAppState(AppState state)
     case AppState::BLE_ROUTE_RECEIVED:
         DBG_EXT(DBG_DEBUG, "AppState::BLE_ROUTE_RECEIVED");
         /* code */
+        sdcard.write(ble.receivedFilename, ble.receivedRoute);        
         route.save(ble.receivedRoute);
         break;
 

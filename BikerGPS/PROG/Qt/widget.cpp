@@ -153,6 +153,9 @@ bool Widget::importGpxFile(const QString &fileName) {
         return false;
     }
 
+    // Save the file name (e.g., "route.gpx") for BLE transmission
+    m_currentFileName = QFileInfo(fileName).fileName();
+
     updateVisualList();
 
     QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
@@ -272,7 +275,9 @@ void Widget::on_btnSend_clicked() {
         qWarning() << "Warning: Could not open or overwrite" << jsonLogFile << "file asset.";
     }
 
-    m_bleController->connectAndSend(bleDeviceName, jsonData);
+    // Pass the actual file name (or fallback to "default.json" if none was imported)[cite: 7]
+    QString fileNameToSend = m_currentFileName.isEmpty() ? "default.json" : m_currentFileName;
+    m_bleController->connectAndSend(bleDeviceName, fileNameToSend, jsonData);
 }
 
 void Widget::addListItem(const QString &text, int row) {

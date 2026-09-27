@@ -37,6 +37,7 @@ private:
     BleController *m_bleController;
     RouteModel *m_routeModel;
     QWebEngineView *m_webView;
+    QString m_currentFileName; // Stores the imported file name
 
     void openWebUrl(const QString &urlStr);
     bool importGpxFile(const QString &fileName);

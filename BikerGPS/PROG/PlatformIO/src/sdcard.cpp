@@ -19,8 +19,23 @@ void SDCard::init()
         listDir(SD, "/", 2);
     }
 
+
     Serial.println("**** TF Card init finished ****.");
     return;
+}
+
+void SDCard::read(String path, String data){
+
+}
+
+void SDCard::write(const std::string &fileName, const std::string &payLoad){
+    String path = fileName.c_str();
+    path = "/" + path;
+    File file = SD.open(path.c_str(), FILE_WRITE);
+
+    size_t bytesWritten = file.write(reinterpret_cast<const uint8_t*>(payLoad.data()), payLoad.size());
+    Serial.print("Bytes Written: ");
+    Serial.println(bytesWritten);
 }
 
 void SDCard::listDir(fs::FS &fs, const char *dirname, uint8_t levels)

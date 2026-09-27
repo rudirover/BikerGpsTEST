@@ -5,6 +5,8 @@
 #include <BLEDevice.h>
 #include <BLEServer.h>
 #include <BLEUtils.h>
+#include <FS.h>
+#include "sdcard.hpp"
 
 #define BLE_DEVICE_NAME "BikerNetworkTool"
 #define BLE_SERVICE_UUID "0000180f-0000-1000-8000-00805f9b34fb"
@@ -21,6 +23,7 @@ public:
     bool routeAvailable;
     bool deviceConnected = false;
     std::string receivedRoute;
+    std::string receivedFilename; // Stores parsed filename
     bool initDone();
 
 private:

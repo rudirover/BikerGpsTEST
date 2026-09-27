@@ -14,7 +14,10 @@ void Ble::init()
         try
         {
             BLEDevice::init(BLE_DEVICE_NAME);
-            DBG_EXT(DBG_INFO, "Device initialized");
+            
+            // Allow the BLE stack to negotiate up to 517 bytes MTU
+            BLEDevice::setMTU(517);
+            DBG_EXT(DBG_INFO, "Device initialized with max MTU support");
 
             pServer = BLEDevice::createServer();
             pServer->setCallbacks(new MyServerCallbacks());
@@ -25,7 +28,7 @@ void Ble::init()
 
             pCharacteristic = pService->createCharacteristic(
                 BLE_CHARACTERISTIC_UUID,
-                BLECharacteristic::PROPERTY_WRITE);
+                BLECharacteristic::PROPERTY_WRITE | BLECharacteristic::PROPERTY_WRITE_NR);
 
             pCharacteristic->setCallbacks(new MyCallbacks());
             pService->start();
@@ -58,28 +61,19 @@ void Ble::enable()
 
     DBG_EXT(DBG_INFO, "Enabling BLE");
 
-    // First time BLE initialization - create the entire BLE stack
     if (!bleInitialized)
     {
         DBG_EXT(DBG_WARNING, "Stack not initialized");
     }
     else
     {
-        // BLE already initialized, just restart advertising
         DBG_EXT(DBG_INFO, "Reusing stack, restarting advertising");
-        if (pAdvertising)
+        if (pAdvertising && deviceConnected)
         {
-            // Ensure clean state before starting
-            if (deviceConnected)
-            {
-                DBG_EXT(DBG_INFO, "Waiting for stale connection to timeout");
-                // Let connection naturally timeout rather than forcing disconnect
-                delay(50);
-            }
+            delay(50);
         }
     }
 
-    // Start advertising
     if (pAdvertising)
     {
         try
@@ -88,7 +82,7 @@ void Ble::enable()
             ble.enabled = true;
             String address = String(BLEDevice::getAddress().toString().c_str());
             DBG_EXT(DBG_INFO, "Advertising started");
-            DBG_EXT(DBG_INFO, "Address: %s", address);
+            DBG_EXT(DBG_INFO, "Address: %s", address.c_str());
         }
         catch (...)
         {
@@ -117,30 +111,20 @@ void Ble::disable()
         try
         {
             pAdvertising->stop();
-            Serial.println("[BLE] Advertising stopped");
         }
-        catch (...)
-        {
-            Serial.println("[BLE] ERROR: Failed to stop advertising");
-        }
+        catch (...) {}
     }
 
-    // Disconnect any connected devices
     if (deviceConnected && pServer)
     {
         try
         {
-            Serial.println("[BLE] Disconnecting device...");
-            // Force disconnect all client peer connections
             pServer->disconnect(pServer->getConnId());
         }
-        catch (...)
-        {
-            Serial.println("[BLE] Error during disconnect handling");
-        }
+        catch (...) {}
     }
     ble.enabled = false;
-    Serial.println("[BLE] BLE disabled (stack kept for reuse)");
+    Serial.println("[BLE] BLE disabled");
 }
 
 void Ble::MyServerCallbacks::onConnect(BLEServer *pServer)
@@ -161,15 +145,36 @@ void Ble::MyServerCallbacks::onDisconnect(BLEServer *pServer)
 
 void Ble::MyCallbacks::onWrite(BLECharacteristic *pChar)
 {
+    std::string rxValue = pChar->getValue();
 
-    ble.receivedRoute = pChar->getValue();
-    ble.routeAvailable = true; // here we should first check if contents is really a route
+    if (rxValue.size() < sizeof(uint32_t)) {
+        DBG_EXT(DBG_ERROR, "[BLE] Received packet too small");
+        return;
+    }
 
-    Serial.printf("[BLE] RX payload size: %u bytes\n", static_cast<unsigned>(ble.receivedRoute.size()));
-    /*
-    Serial.print("[BLE] RX: ");
-    Serial.println(ble.receivedRoute.c_str());
-    */
+    // 1. Extract filename length (first 4 bytes)
+    uint32_t filenameLen = 0;
+    memcpy(&filenameLen, rxValue.data(), sizeof(uint32_t));
+
+    if (rxValue.size() < sizeof(uint32_t) + filenameLen) {
+        DBG_EXT(DBG_ERROR, "[BLE] Corrupted packet size for filename");
+        return;
+    }
+
+    // 2. Extract filename string
+    std::string filename = rxValue.substr(sizeof(uint32_t), filenameLen);
+
+    // 3. Extract remainder as JSON payload data
+    std::string jsonData = rxValue.substr(sizeof(uint32_t) + filenameLen);
+
+    // Save states
+    ble.receivedFilename = filename;
+    ble.receivedRoute = jsonData;
+
+    ble.routeAvailable = true;    
+
+    DBG_EXT(DBG_INFO, "[BLE] Filename: %s (%u bytes)", filename.c_str(), filenameLen);
+    DBG_EXT(DBG_INFO, "[BLE] RX payload size: %u bytes", static_cast<unsigned>(jsonData.size()));
 }
 
 bool Ble::initDone()
