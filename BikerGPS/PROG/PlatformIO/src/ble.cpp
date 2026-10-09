@@ -13,6 +13,9 @@ void Ble::init()
         BLEDevice::init(BLE_DEVICE_NAME);
         BLEDevice::setMTU(517);
 
+        // Set default preferred PHY to 2M for higher throughput
+        esp_ble_gap_set_prefered_default_phy(ESP_BLE_GAP_PHY_2M_PREF_MASK, ESP_BLE_GAP_PHY_2M_PREF_MASK);        
+
         pServer = BLEDevice::createServer();
         pServer->setCallbacks(new MyServerCallbacks());
 
@@ -52,7 +55,7 @@ void Ble::disable()
 void Ble::MyServerCallbacks::onConnect(BLEServer *pServer)
 {
     ble.deviceConnected = true;
-    Serial.println("[BLE] Device connected");
+    Serial.println("[BLE] Device connected");  
 }
 
 void Ble::MyServerCallbacks::onDisconnect(BLEServer *pServer)

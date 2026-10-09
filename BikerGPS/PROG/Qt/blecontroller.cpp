@@ -126,7 +126,7 @@ void BleController::sendNextChunk() {
         m_activeService->writeCharacteristic(characteristic, packet, mode);
     }
     else if (m_transferState == SendingData) {
-        int chunkSize = 500; // Safe chunk payload size below MTU limits
+        int chunkSize = 512; // Optimized chunk payload size for 517 MTU
         int remaining = m_currentFile.data.size() - m_currentFileOffset;
 
         if (remaining > 0) {
@@ -141,7 +141,7 @@ void BleController::sendNextChunk() {
             m_activeService->writeCharacteristic(characteristic, packet, mode);
         } else {
             m_transferState = SendingEnd;
-            sendNextChunk(); // Automatically trigger end packet
+            sendNextChunk();
         }
     }
     else if (m_transferState == SendingEnd) {
@@ -170,7 +170,7 @@ void BleController::onServiceDiscovered(const QBluetoothUuid &gattValue) {
 
     connect(m_activeService, &QLowEnergyService::characteristicWritten,
             this, [this]() {
-                sendNextChunk(); // Chain next chunk upon confirmation write response
+                sendNextChunk();
             });
 
     connect(m_activeService, &QLowEnergyService::stateChanged, this, [this](QLowEnergyService::ServiceState state) {
