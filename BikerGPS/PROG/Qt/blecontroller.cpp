@@ -1,14 +1,13 @@
-#include "blecontroller.h"
+#include "blecontroller.hpp"
 #include <QDebug>
 #include <QCoreApplication>
 #include <QDir>
 #include <QSettings>
+#include <QDataStream>
 
 BleController::BleController(QObject *parent)
-    : QObject(parent), m_controller(nullptr), m_activeService(nullptr), m_deviceFound(false) {
-
+    : QObject(parent) {
     loadConfig();
-
     m_discoveryAgent = new QBluetoothDeviceDiscoveryAgent(this);
     m_discoveryAgent->setLowEnergyDiscoveryTimeout(m_discoveryTimeoutMs);
 
@@ -31,6 +30,7 @@ void BleController::loadConfig() {
 }
 
 void BleController::cleanUpConnection() {
+    m_transferState = Idle;
     if (m_activeService) {
         m_activeService->deleteLater();
         m_activeService = nullptr;
@@ -42,111 +42,152 @@ void BleController::cleanUpConnection() {
     }
 }
 
-void BleController::connectAndSend(const QString &targetName, const QString &filename, const QByteArray &jsonData) {
+void BleController::connectAndSendFiles(const QString &targetName, const QList<BleFilePayload> &files) {
     loadConfig();
     cleanUpConnection();
+
     m_targetDeviceName = targetName;
-    m_pendingFilename = filename;
-    m_pendingData = jsonData;
+    m_fileQueue.clear();
+    for (const auto &file : files) {
+        m_fileQueue.enqueue(file);
+    }
     m_deviceFound = false;
 
-    emit progressChanged(10, "Scanning for device...");
+    if (m_fileQueue.isEmpty()) {
+        emit transmissionFinished(false);
+        return;
+    }
+
+    emit progressChanged(10, "Scanning...");
     m_discoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
 }
 
 void BleController::onDeviceDiscovered(const QBluetoothDeviceInfo &device) {
     if (m_deviceFound) return;
 
-    qDebug() << "Device found: " << device.name();
+    if ((device.coreConfigurations() & QBluetoothDeviceInfo::LowEnergyCoreConfiguration) &&
+        (device.name() == m_targetDeviceName)) {
 
-    if (device.coreConfigurations() & QBluetoothDeviceInfo::LowEnergyCoreConfiguration) {
-        if (device.name() == m_targetDeviceName) {
-            m_deviceFound = true;
-            m_discoveryAgent->stop();
+        m_deviceFound = true;
+        m_discoveryAgent->stop();
+        emit progressChanged(40, "Connecting...");
 
-            emit progressChanged(40, "Device found. Connecting...");
+        m_controller = QLowEnergyController::createCentral(device, this);
+        connect(m_controller, &QLowEnergyController::connected, this, [this]() {
+            emit progressChanged(60, "Discovering...");
+            m_controller->discoverServices();
+        });
+        connect(m_controller, &QLowEnergyController::disconnected, this, [this]() {
+            emit logMessage("Disconnected from peripheral device.");
+        });
+        connect(m_controller, &QLowEnergyController::serviceDiscovered, this, &BleController::onServiceDiscovered);
+        connect(m_controller, &QLowEnergyController::errorOccurred, this, [this](QLowEnergyController::Error error){
+            emit logMessage("Controller Error: " + QString::number(error));
+            emit transmissionFinished(false);
+        });
 
-            m_controller = QLowEnergyController::createCentral(device, this);
-
-            connect(m_controller, &QLowEnergyController::mtuChanged, this, [this](int mtu) {
-                emit logMessage("Active MTU updated to: " + QString::number(mtu));
-            });
-
-            connect(m_controller, &QLowEnergyController::connected, this, [this]() {
-                emit progressChanged(60, "Connected. Discovering services...");
-                m_controller->discoverServices();
-            });
-
-            connect(m_controller, &QLowEnergyController::disconnected, this, [this]() {
-                emit logMessage("Disconnected from peripheral device.");
-            });
-
-            connect(m_controller, &QLowEnergyController::serviceDiscovered, this, &BleController::onServiceDiscovered);
-            connect(m_controller, &QLowEnergyController::discoveryFinished, this, &BleController::onServiceDiscoveryFinished);
-
-            connect(m_controller, &QLowEnergyController::errorOccurred, this, [this](QLowEnergyController::Error error){
-                emit logMessage("Controller Error: " + QString::number(error));
-                emit transmissionFinished(false);
-            });
-
-            m_controller->connectToDevice();
-        }
+        m_controller->connectToDevice();
     }
 }
 
 void BleController::onScanFinished() {
     if (!m_deviceFound) {
-        emit progressChanged(0, "Device not found.");
+        emit progressChanged(0, "Not Found.");
         emit transmissionFinished(false);
     }
 }
 
-void BleController::onServiceDiscovered(const QBluetoothUuid &gattValue) {
-    if (gattValue == QBluetoothUuid(m_serviceUuid)) {
-        m_activeService = m_controller->createServiceObject(gattValue, this);
+void BleController::sendNextChunk() {
+    if (!m_activeService) return;
 
-        if (m_activeService) {
-            connect(m_activeService, &QLowEnergyService::characteristicWritten,
-                    this, [this](const QLowEnergyCharacteristic &ch, const QByteArray &value) {
-                        emit progressChanged(100, "Data sent successfully!");
-                        emit transmissionFinished(true);
-                        cleanUpConnection();
-                    });
+    QLowEnergyCharacteristic characteristic = m_activeService->characteristic(QBluetoothUuid(m_characteristicUuid));
+    if (!characteristic.isValid()) {
+        emit progressChanged(0, "Char Error.");
+        emit transmissionFinished(false);
+        return;
+    }
 
-            connect(m_activeService, &QLowEnergyService::stateChanged, this, [this](QLowEnergyService::ServiceState state) {
-                if (state == QLowEnergyService::RemoteServiceDiscovered) {
-                    emit progressChanged(80, "Service ready. Transmitting...");
+    QByteArray packet;
+    QLowEnergyService::WriteMode mode = m_writeWithResponse ?
+                                            QLowEnergyService::WriteWithResponse : QLowEnergyService::WriteWithoutResponse;
 
-                    QLowEnergyCharacteristic characteristic = m_activeService->characteristic(QBluetoothUuid(m_characteristicUuid));
+    if (m_transferState == SendingStart) {
+        packet.append(static_cast<char>(0x01)); // START_FILE
+        quint32 fileSize = m_currentFile.data.size();
+        packet.append(reinterpret_cast<const char*>(&fileSize), sizeof(quint32));
+        QByteArray fnameBytes = m_currentFile.filename.toUtf8();
+        quint32 fnameLen = fnameBytes.size();
+        packet.append(reinterpret_cast<const char*>(&fnameLen), sizeof(quint32));
+        packet.append(fnameBytes);
 
-                    if (!characteristic.isValid()) {
-                        emit progressChanged(0, "Characteristic error.");
-                        emit transmissionFinished(false);
-                        return;
-                    }
+        emit logMessage(QString("Starting file: %1").arg(m_currentFile.filename));
+        m_transferState = SendingData;
+        m_currentFileOffset = 0;
+        m_activeService->writeCharacteristic(characteristic, packet, mode);
+    }
+    else if (m_transferState == SendingData) {
+        int chunkSize = 500; // Safe chunk payload size below MTU limits
+        int remaining = m_currentFile.data.size() - m_currentFileOffset;
 
-                    // Build custom protocol packet safely
-                    QByteArray payloadPacket;
-                    QByteArray filenameBytes = m_pendingFilename.toUtf8();
-                    quint32 filenameLen = static_cast<quint32>(filenameBytes.size());
+        if (remaining > 0) {
+            int currentSize = qMin(chunkSize, remaining);
+            packet.append(static_cast<char>(0x02)); // DATA_CHUNK
+            packet.append(m_currentFile.data.mid(m_currentFileOffset, currentSize));
+            m_currentFileOffset += currentSize;
 
-                    payloadPacket.append(reinterpret_cast<const char*>(&filenameLen), sizeof(filenameLen));
-                    payloadPacket.append(filenameBytes);
-                    payloadPacket.append(m_pendingData);
+            int progress = 70 + static_cast<int>(30.0 * m_currentFileOffset / m_currentFile.data.size());
+            emit progressChanged(progress, "Transmitting...");
 
-                    int currentMtu = m_controller->mtu();
-                    emit logMessage(QString("Payload size: %1 bytes | Current MTU limit: %2").arg(payloadPacket.size()).arg(currentMtu));
-
-                    QLowEnergyService::WriteMode mode = m_writeWithResponse ? QLowEnergyService::WriteWithResponse : QLowEnergyService::WriteWithoutResponse;
-
-                    m_activeService->writeCharacteristic(characteristic, payloadPacket, mode);
-                }
-            });
-
-            m_activeService->discoverDetails();
+            m_activeService->writeCharacteristic(characteristic, packet, mode);
+        } else {
+            m_transferState = SendingEnd;
+            sendNextChunk(); // Automatically trigger end packet
         }
+    }
+    else if (m_transferState == SendingEnd) {
+        packet.append(static_cast<char>(0x03)); // END_FILE
+        emit logMessage(QString("Finished file: %1").arg(m_currentFile.filename));
+
+        if (!m_fileQueue.isEmpty()) {
+            m_currentFile = m_fileQueue.dequeue();
+            m_transferState = SendingStart;
+        } else {
+            m_transferState = Idle;
+            emit progressChanged(100, "Sent!");
+            emit transmissionFinished(true);
+            cleanUpConnection();
+            return;
+        }
+        m_activeService->writeCharacteristic(characteristic, packet, mode);
     }
 }
 
-void BleController::onServiceDiscoveryFinished() {
+void BleController::onServiceDiscovered(const QBluetoothUuid &gattValue) {
+    if (gattValue != QBluetoothUuid(m_serviceUuid)) return;
+
+    m_activeService = m_controller->createServiceObject(gattValue, this);
+    if (!m_activeService) return;
+
+    connect(m_activeService, &QLowEnergyService::characteristicWritten,
+            this, [this]() {
+                sendNextChunk(); // Chain next chunk upon confirmation write response
+            });
+
+    connect(m_activeService, &QLowEnergyService::stateChanged, this, [this](QLowEnergyService::ServiceState state) {
+        if (state != QLowEnergyService::RemoteServiceDiscovered) return;
+
+        emit progressChanged(70, "Transmitting...");
+
+        if (m_fileQueue.isEmpty()) {
+            emit transmissionFinished(false);
+            cleanUpConnection();
+            return;
+        }
+
+        m_currentFile = m_fileQueue.dequeue();
+        m_transferState = SendingStart;
+        sendNextChunk();
+    });
+
+    m_activeService->discoverDetails();
 }

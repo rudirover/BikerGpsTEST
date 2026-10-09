@@ -1,5 +1,5 @@
 #include "display.hpp"
-//#include "FreeSans7pt7b.h"
+// #include "FreeSans7pt7b.h"
 
 Display display;
 
@@ -124,21 +124,98 @@ void Display::showNoRoute()
 void Display::showReceiveRoute()
 {
     showingRoute = false;
-    canvas.fillScreen(TFT_BLACK);
+    sprite.fillScreen(TFT_BLACK);
 
     // Draw Bluetooth icon at the top - blue, large
     drawBluetoothIcon(canvas.width() / 2, 80, 120, TFT_BLUE);
 
     // Add text below icon
-    canvas.setTextColor(TFT_WHITE, TFT_BLACK);
-    canvas.setFont(&fonts::FreeSans12pt7b); // Use FreeSans 12pt font
-    canvas.setTextDatum(CC_DATUM);          // Center alignment
-    canvas.drawString("WAITING FOR", canvas.width() / 2, (canvas.height() / 2) + 20);
-    canvas.drawString("NEW ROUTE", canvas.width() / 2, (canvas.height() / 2) + 60);
+    sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+    sprite.setFont(&fonts::FreeSans12pt7b); // Use FreeSans 12pt font
+    sprite.setTextDatum(CC_DATUM);          // Center alignment
+    sprite.drawString("WAITING FOR", canvas.width() / 2, (canvas.height() / 2) + 30);
+    sprite.drawString("NEW ROUTE", canvas.width() / 2, (canvas.height() / 2) + 70);
 
-    canvas.setFont(&FreeSans7pt7b);
-    canvas.setTextColor(TFT_WHITE, TFT_BLACK);
-    canvas.drawString("SWIPE LEFT TO EXIT", canvas.width() / 2, 305);
+    sprite.setFont(&FreeSans7pt7b);
+    sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+    sprite.drawString("SWIPE LEFT TO EXIT", canvas.width() / 2, 305);
+
+    sprite.pushSprite(&canvas, 0, 0);    
+}
+
+void Display::showReceiveProgress(uint32_t receivedBytes, uint32_t totalBytes, const char *fileName)
+{
+    std::string showName;
+    showingRoute = false;
+    sprite.fillScreen(TFT_BLACK);
+
+    // Draw Bluetooth icon near the top
+    drawBluetoothIcon(canvas.width() / 2, 60, 80, TFT_BLUE);
+
+    // Title text
+    sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+    sprite.setFont(&fonts::FreeSans9pt7b);
+    sprite.setTextDatum(CC_DATUM);
+    sprite.drawString("RECEIVING ROUTE", canvas.width() / 2, 125);
+
+    // Strip extension for UI display (e.g., "route.json" -> "route")
+    showName = fileName;
+    size_t dotIndex = showName.find_last_of(".");
+    if (dotIndex != std::string::npos)
+    {
+        showName = showName.substr(0, dotIndex);
+    }
+
+    // Filename
+    sprite.setFont(&FreeSans12pt7b);
+    sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+    sprite.drawString(showName.c_str(), canvas.width() / 2, 150);
+
+    // Calculate percentage
+    float percent = 0.0f;
+    if (totalBytes > 0)
+    {
+        percent = ((float)receivedBytes / totalBytes) * 100.0f;
+        if (percent > 100.0f)
+            percent = 100.0f;
+    }
+
+    // Draw Percentage text in the center of the ring
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%.0f%%", percent);
+    sprite.setFont(&fonts::FreeSansBold12pt7b);
+    sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+    sprite.drawString(buf, canvas.width() / 2, 225);
+
+    // Circular Progress Ring Parameters
+    int cx = canvas.width() / 2;
+    int cy = 227;
+    int radius = 45;
+    int thickness = 10;
+
+    float targetAngle = (percent / 100.0f) * 2.0f * M_PI;
+
+    // 1. Draw full background track ring (muted dark gray)
+    for (float a = 0; a < 2.0f * M_PI; a += 0.05f)
+    {
+        int x = cx + lround(sinf(a) * radius);
+        int y = cy - lround(cosf(a) * radius);
+        sprite.fillCircle(x, y, thickness / 2, 0x39E4);
+    }
+
+    // 2. Draw active progress arc starting from top (0) clockwise
+    for (float a = 0; a <= targetAngle; a += 0.03f)
+    {
+        int x = cx + lround(sinf(a) * radius);
+        int y = cy - lround(cosf(a) * radius);
+        sprite.fillCircle(x, y, thickness / 2, TFT_BLUE);
+    }
+
+    sprite.setFont(&FreeSans7pt7b);
+    sprite.setTextColor(TFT_WHITE, TFT_BLACK);
+    sprite.drawString("SWIPE LEFT TO EXIT", canvas.width() / 2, 305);
+
+    sprite.pushSprite(&canvas, 0, 0);
 }
 
 /*
@@ -205,7 +282,7 @@ void Display::drawBluetoothIcon(int centerX, int centerY, int size, uint16_t col
     // Draw outer circle (very thick - triple lines)
     for (int i = 0; i < 5; i++)
     {
-        canvas.drawCircle(cx, cy, r - i, color);
+        sprite.drawCircle(cx, cy, r - i, color);
     }
 
     // Draw simple Bluetooth symbol: vertical line with triangles
@@ -214,39 +291,39 @@ void Display::drawBluetoothIcon(int centerX, int centerY, int size, uint16_t col
     // Center vertical stem (very thick)
     for (int offset = 0; offset < 5; offset++)
     {
-        canvas.drawLine(cx + offset, cy - h, cx + offset, cy + h, color);
+        sprite.drawLine(cx + offset, cy - h, cx + offset, cy + h, color);
     }
 
     // Top-left triangle (upper half, left side)
     for (int offset = 0; offset < 5; offset++)
     {
-        canvas.drawLine(cx - r / 2 + offset, cy - h / 2, cx + offset, cy, color);
+        sprite.drawLine(cx - r / 2 + offset, cy - h / 2, cx + offset, cy, color);
     }
 
     // Top-right triangle (upper half, right side)
     for (int offset = 0; offset < 5; offset++)
     {
-        canvas.drawLine(cx + offset, cy - h, cx + r / 2 + offset, cy - h / 2, color);
+        sprite.drawLine(cx + offset, cy - h, cx + r / 2 + offset, cy - h / 2, color);
     }
     for (int offset = 0; offset < 5; offset++)
     {
-        canvas.drawLine(cx + r / 2 + offset, cy - h / 2, cx + offset, cy, color);
+        sprite.drawLine(cx + r / 2 + offset, cy - h / 2, cx + offset, cy, color);
     }
 
     // Bottom-left triangle (lower half, left side)
     for (int offset = 0; offset < 5; offset++)
     {
-        canvas.drawLine(cx + offset, cy, cx - r / 2 + offset, cy + h / 2, color);
+        sprite.drawLine(cx + offset, cy, cx - r / 2 + offset, cy + h / 2, color);
     }
 
     // Bottom-right triangle (lower half, right side)
     for (int offset = 0; offset < 5; offset++)
     {
-        canvas.drawLine(cx + offset, cy, cx + r / 2 + offset, cy + h / 2, color);
+        sprite.drawLine(cx + offset, cy, cx + r / 2 + offset, cy + h / 2, color);
     }
     for (int offset = 0; offset < 5; offset++)
     {
-        canvas.drawLine(cx + r / 2 + offset, cy + h / 2, cx + offset, cy + h, color);
+        sprite.drawLine(cx + r / 2 + offset, cy + h / 2, cx + offset, cy + h, color);
     }
 }
 
@@ -353,8 +430,8 @@ void Display::drawDirectionDot()
         DBG_EXT(DBG_INFO, "activeTptIdx = %d", route.activeTptIndex);
         DBG_EXT(DBG_INFO, "targetLat = %f", route.targetLat);
         DBG_EXT(DBG_INFO, "targetLon = %f", route.targetLon);
-        DBG_EXT(DBG_INFO, "targetDist = %f", route.targetDist);  
-        */                  
+        DBG_EXT(DBG_INFO, "targetDist = %f", route.targetDist);
+        */
     }
 }
 
@@ -375,8 +452,6 @@ void Display::drawWptDistanceBar()
     sprite.fillRect(posX, 0, sizeX, canvas.height(), TFT_GREY);
     sprite.fillRect(posX, posY, sizeX, sizeY, TFT_WHITE);
 }
-
-
 
 void Display::drawSatelliteFixBar()
 {

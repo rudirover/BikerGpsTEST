@@ -30,7 +30,7 @@ void setup()
     DBG_EXT(DBG_INFO, "Touch initialized");
 
     sdcard.init();
-    DBG_EXT(DBG_INFO, "SDCard initialized");    
+    DBG_EXT(DBG_INFO, "SDCard initialized");
 
     ble.init();
     DBG_EXT(DBG_INFO, "Ble initialized");
@@ -39,12 +39,10 @@ void setup()
     DBG_EXT(DBG_INFO, "Gps initialized");
 
     buzzer.init();
-    DBG_EXT(DBG_INFO, "Buzzer initialized");    
+    DBG_EXT(DBG_INFO, "Buzzer initialized");
 
     route.init();
     DBG_EXT(DBG_INFO, "Route initialized");
-
-
 }
 
 void loop()
@@ -109,7 +107,7 @@ void enterPowerState(PowerState state)
         break;
 
     case PowerState::DISPLAY_OFF:
-        DBG_EXT(DBG_DEBUG, "PowerState::DISPLAY_ON");
+        DBG_EXT(DBG_DEBUG, "PowerState::DISPLAY_OFF");
         /* code */
         display.fadeBackLight(BACKLIGHT_OFF_LEVEL);
         break;
@@ -276,8 +274,9 @@ void enterAppState(AppState state)
     case AppState::BLE_ROUTE_RECEIVED:
         DBG_EXT(DBG_DEBUG, "AppState::BLE_ROUTE_RECEIVED");
         /* code */
-        sdcard.write(ble.receivedFilename, ble.receivedRoute);        
+        /*sdcard.write(ble.receivedFilename, ble.receivedRoute);
         route.save(ble.receivedRoute);
+        */
         break;
 
     case AppState::SAVED_ROUTE_EXISTS:
@@ -451,28 +450,126 @@ void executeAppState(AppState state)
         break;
 
     case AppState::BLE_RECEIVE_ROUTE:
+    {
         if (oldState != state)
-            DBG_EXT(DBG_DEBUG, "AppState::BLE_RECEIVE_ROUTE");
-        /* code */
-        if (((millis() - bleTimeOut) > BLE_TIMEOUT) && !ble.deviceConnected)
         {
-            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > BLE_TIMEOUT");
+            DBG_EXT(DBG_DEBUG, "AppState::BLE_RECEIVE_ROUTE");
+            display.showReceiveRoute(); // Show initial waiting screen
+        }
+
+        static File currentFile;
+        static std::string activeFileName = "";
+        static uint32_t expectedFileSize = 0;
+        static uint32_t totalBytesReceived = 0;
+        static bool wasConnected = false;
+
+        BleChunk chunk;
+        bool progressUpdated = false;
+
+        while (ble.getNextChunk(chunk))
+        {
+            if (chunk.type == BlePacketType::START_FILE)
+            {
+                if (currentFile)
+                    currentFile.close();
+
+                size_t offset = 0;
+                if (chunk.data.size() >= sizeof(uint32_t))
+                {
+                    memcpy(&expectedFileSize, chunk.data.data() + offset, sizeof(uint32_t));
+                    offset += sizeof(uint32_t);
+                }
+
+                uint32_t nameLen = 0;
+                if (chunk.data.size() >= offset + sizeof(uint32_t))
+                {
+                    memcpy(&nameLen, chunk.data.data() + offset, sizeof(uint32_t));
+                    offset += sizeof(uint32_t);
+
+                    activeFileName = chunk.data.substr(offset, nameLen);
+                    std::string fullPath = "/" + activeFileName;
+                    currentFile = SD.open(fullPath.c_str(), FILE_WRITE);
+                    totalBytesReceived = 0;
+
+                    DBG_EXT(DBG_INFO, "[BLE] Opening file: %s | Expected Size: %u bytes", fullPath.c_str(), expectedFileSize);
+                }
+            }
+            else if (chunk.type == BlePacketType::DATA_CHUNK)
+            {
+                if (currentFile)
+                {
+                    currentFile.write(reinterpret_cast<const uint8_t *>(chunk.data.data()), chunk.data.size());
+                    totalBytesReceived += chunk.data.size();
+                    progressUpdated = true;
+                }
+            }
+            else if (chunk.type == BlePacketType::END_FILE)
+            {
+                if (currentFile)
+                {
+                    currentFile.flush();
+                    currentFile.close();
+                    progressUpdated = true;
+                    DBG_EXT(DBG_INFO, "[BLE] Successfully completed file: %s (%u bytes written)", activeFileName.c_str(), totalBytesReceived);
+                }
+            }
+        }
+
+        if (ble.deviceConnected)
+        {
+            wasConnected = true;
+        }
+
+        // Update the display dynamically on connection change or progress update
+        static bool lastConnectionState = false;
+        if (ble.deviceConnected != lastConnectionState || progressUpdated)
+        {
+            lastConnectionState = ble.deviceConnected;
+            if (ble.deviceConnected)
+            {
+                display.showReceiveProgress(totalBytesReceived, expectedFileSize, activeFileName.c_str());
+            }
+            else
+            {
+                display.showReceiveRoute();
+            }
+        }
+
+        if (((millis() - bleTimeOut) > BLE_TIMEOUT) && !wasConnected)
+        {
+            wasConnected = false;
+            if (currentFile)
+                currentFile.close();
             changeAppState(AppState::BOOT_DONE);
             break;
         }
+
+        if (wasConnected && !ble.deviceConnected)
+        {
+            wasConnected = false;
+            if (currentFile)
+                currentFile.close();
+            if (route.exists())
+            {
+                changeAppState(AppState::SAVED_ROUTE_EXISTS);
+            }
+            else
+            {
+                changeAppState(AppState::BOOT_DONE);
+            }
+            break;
+        }
+
         if (touching.gesture == GestureType::GESTURE_SWIPE_LEFT)
         {
-            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > SWIPE_LEFT");
+            wasConnected = false;
+            if (currentFile)
+                currentFile.close();
             changeAppState(AppState::BOOT_DONE);
-            break;
-        }
-        if (ble.routeAvailable)
-        {
-            DBG_EXT(DBG_DEBUG, "AppState::BOOT_DONE - > BLE_ROUTE_AVAILABLE");
-            changeAppState(AppState::BLE_ROUTE_RECEIVED);
             break;
         }
         break;
+    }
 
     case AppState::BLE_ROUTE_RECEIVED:
         if (oldState != state)

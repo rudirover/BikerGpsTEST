@@ -1,4 +1,4 @@
-#include "routemodel.h"
+#include "routemodel.hpp"
 #include <QCoreApplication>
 #include <QDir>
 #include <QFile>
@@ -27,10 +27,7 @@ static double calculateBearing(double lat1, double lon1, double lat2, double lon
 
 static double calculateAngleDiff(double b1, double b2) {
     double diff = std::abs(b2 - b1);
-    if (diff > 180.0) {
-        diff = 360.0 - diff;
-    }
-    return diff;
+    return (diff > 180.0) ? (360.0 - diff) : diff;
 }
 
 RouteModel::RouteModel(QObject *parent) : QObject(parent) {
@@ -44,98 +41,46 @@ void RouteModel::loadConfig() {
         QFile configFile(configPath);
         if (configFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
             QTextStream out(&configFile);
-            out << "[Bluetooth]\n";
-            out << "# Timeout in milliseconds for BLE discovery scanning\n";
-            out << "DiscoveryTimeoutMs=7000\n";
-            out << "# Target BLE peripheral device name\n";
-            out << "DeviceName=BikerNetworkTool\n";
-            out << "# Target GATT Service UUID\n";
-            out << "ServiceUuid=0000180f-0000-1000-8000-00805f9b34fb\n";
-            out << "# Target GATT Characteristic UUID\n";
-            out << "CharacteristicUuid=00002a19-0000-1000-8000-00805f9b34fb\n";
-            out << "# Enable GATT write with response\n";
-            out << "WriteWithResponse=true\n\n";
-
-            out << "[Overpass]\n";
-            out << "# API endpoint URL for downloading bicycle network routes\n";
-            out << "ApiUrl=https://overpass-api.de/api/interpreter\n";
-            out << "# Server-side execution timeout in seconds\n";
-            out << "QueryTimeoutSec=120\n";
-            out << "# HTTP User-Agent identification string\n";
-            out << "UserAgent=BikeNetworkTool/1.0 (Contact: rudih@project.local)\n";
-            out << "# Minimum segment length threshold in meters\n";
-            out << "MinSegmentDistanceMeters=50.0\n";
-            out << "# Mean Earth radius in meters\n";
-            out << "EarthRadiusMeters=6371000.0\n";
-            out << "# Overpass query relation filter\n";
-            out << "QueryFilter=relation[\"route\"=\"bicycle\"][\"network\"=\"rcn\"]\n";
-            out << "# Distance measurement unit string\n";
-            out << "DistanceUnit=km\n\n";
-
-            out << "[Route]\n";
-            out << "# Minimum turn angle in degrees (0-180) to trigger an auto-generated waypoint.\n";
-            out << "TurnAngleThreshold=45.0\n";
-            out << "# Minimum required distance in meters between consecutive auto-generated waypoints.\n";
-            out << "MinDistBetweenWpts=15.0\n";
-            out << "# Lookback and lookahead distance in meters used to calculate heading vectors around curves.\n";
-            out << "SampleWindowMeters=5.0\n";
-            out << "# Automatically write sent_route_log.json and sent_route_log.gpx during GPX import (true/false).\n";
-            out << "AutoSaveLogs=true\n";
-            out << "# Number of decimal places for latitude/longitude coordinate output.\n";
-            out << "CoordinatePrecision=6\n";
-            out << "# Mean Earth radius in meters used for Haversine distance calculations.\n";
-            out << "EarthRadiusMeters=6371000.0\n";
-            out << "# Filename for the exported JSON route log saved beside the application executable.\n";
-            out << "JsonLogFilename=sent_route_log.json\n";
-            out << "# Filename for the exported GPX route log saved beside the application executable.\n";
-            out << "GpxLogFilename=sent_route_log.gpx\n";
-            out << "# Metadata creator string written inside the GPX XML root element.\n";
-            out << "GpxCreator=RouteModel\n";
-            out << "# Starting integer used to name sequentially auto-generated waypoints.\n";
-            out << "StartWaypointIndex=1\n";
-            out << "# GPX schema version\n";
-            out << "GpxVersion=1.1\n";
-            out << "# GPX XML namespace\n";
-            out << "GpxXmlns=http://www.topografix.com/GPX/1/1\n";
-            out << "# Distance measurement unit string\n";
-            out << "DistanceUnit=km\n";
-            out << "# Fallback text displayed when segment distance is unknown\n";
-            out << "MissingDistanceFallback=?? km\n\n";
-
-            out << "[Web]\n";
-            out << "# URL loaded in integrated web map browser\n";
-            out << "MapViewerUrl=https://www.fietsknooppunt.be/nl-be/\n";
-            out << "BunchiesUrl=https://www.bunchies.cc\n";
-            out << "# Title for the web browser window\n";
-            out << "WindowTitle=Fietsknooppunt Browser\n";
-            out << "WindowWidth=944\n";
-            out << "WindowHeight=880\n";
-            out << "SnapOffsetPx=8\n\n";
-
-            out << "[UI]\n";
-            out << "WindowWidth=256\n";
-            out << "WindowHeight=880\n";
-            out << "ProgressResetDelayMs=5000\n";
-            out << "StatusMessageDelayMs=3000\n";
-            out << "DistanceSeparatorFormat=│  ▼  %1  ▼  │\n";
-            out << "ListItemWidth=84\n";
-            out << "ListItemHeight=84\n";
-            out << "DistanceItemHeight=35\n";
-            out << "BadgeSize=64\n";
-            out << "BadgeBgColor=#23232a\n";
-            out << "BadgeBorderColor=#10b981\n";
-            out << "BadgeTextColor=#ffffff\n";
-            out << "BadgeBorderWidth=4\n";
-            out << "BadgeFontSize=24\n";
-            out << "DistanceTextColor=#10b981\n";
-            out << "ContainerMarginLeft=10\n";
-            out << "ContainerMarginTop=4\n";
-            out << "ContainerMarginRight=10\n";
-            out << "ContainerMarginBottom=4\n";
-            out << "GpxDownloadFilter=GPX Track (*.gpx);;All Files (*.*)\n";
-            out << "GpxOpenFilter=GPX Files (*.gpx)\n";
-
-            configFile.close();
+            out << "[Bluetooth]\n"
+                << "DiscoveryTimeoutMs=7000\n"
+                << "DeviceName=BikerNetworkTool\n"
+                << "ServiceUuid=0000180f-0000-1000-8000-00805f9b34fb\n"
+                << "CharacteristicUuid=00002a19-0000-1000-8000-00805f9b34fb\n"
+                << "WriteWithResponse=true\n\n"
+                << "[Overpass]\n"
+                << "ApiUrl=https://overpass-api.de/api/interpreter\n"
+                << "QueryTimeoutSec=120\n"
+                << "UserAgent=BikeNetworkTool/1.0 (Contact: rudih@project.local)\n"
+                << "MinSegmentDistanceMeters=50.0\n"
+                << "EarthRadiusMeters=6371000.0\n"
+                << "QueryFilter=relation[\"route\"=\"bicycle\"][\"network\"=\"rcn\"]\n"
+                << "DistanceUnit=km\n\n"
+                << "[Route]\n"
+                << "TurnAngleThreshold=45.0\n"
+                << "MinDistBetweenWpts=15.0\n"
+                << "SampleWindowMeters=5.0\n"
+                << "AutoSaveLogs=true\n"
+                << "CoordinatePrecision=6\n"
+                << "EarthRadiusMeters=6371000.0\n"
+                << "JsonLogFilename=sent_route_log.json\n"
+                << "GpxLogFilename=sent_route_log.gpx\n"
+                << "MapLogFilename=sent_route_log.bma2\n"
+                << "GpxCreator=RouteModel\n"
+                << "StartWaypointIndex=1\n"
+                << "GpxVersion=1.1\n"
+                << "GpxXmlns=http://www.topografix.com/GPX/1/1\n"
+                << "DistanceUnit=km\n"
+                << "MissingDistanceFallback=?? km\n\n"
+                << "[Web]\n"
+                << "MapViewerUrl=https://www.fietsknooppunt.be/nl-be/\n"
+                << "BunchiesUrl=https://www.bunchies.cc\n"
+                << "WindowTitle=Fietsknooppunt Browser\n"
+                << "WindowWidth=944\n"
+                << "WindowHeight=880\n"
+                << "SnapOffsetPx=8\n\n"
+                << "[UI]\n"
+                << "WindowWidth=256\n"
+                << "WindowHeight=880\n";
         }
     }
 
@@ -148,6 +93,7 @@ void RouteModel::loadConfig() {
     m_earthRadiusMeters = settings.value("Route/EarthRadiusMeters", 6371000.0).toDouble();
     m_jsonLogFilename = settings.value("Route/JsonLogFilename", "sent_route_log.json").toString();
     m_gpxLogFilename = settings.value("Route/GpxLogFilename", "sent_route_log.gpx").toString();
+    m_mapLogFilename = settings.value("Route/MapLogFilename", "sent_route_log.bma2").toString();
     m_gpxCreator = settings.value("Route/GpxCreator", "RouteModel").toString();
     m_startWaypointIndex = settings.value("Route/StartWaypointIndex", 1).toInt();
     m_gpxVersion = settings.value("Route/GpxVersion", "1.1").toString();
@@ -165,44 +111,46 @@ QJsonArray RouteModel::currentPathJson() const {
 }
 
 QString RouteModel::toOrderedJsonString() const {
-    QString json = "[\n";
+    QString jsonOutput;
+    QTextStream json(&jsonOutput);
+    json << "[\n";
     for (int i = 0; i < m_currentPathJson.size(); ++i) {
         QJsonObject wptObj = m_currentPathJson[i].toObject();
-        json += "  {\n";
-        json += QString("    \"wpt\": \"%1\",\n").arg(wptObj["wpt"].toString());
-        json += QString("    \"dist\": %1,\n").arg(qRound(wptObj["dist"].toDouble()));
-        json += QString("    \"lat\": %1,\n").arg(QString::number(wptObj["lat"].toDouble(), 'f', m_coordinatePrecision));
+        json << "  {\n"
+             << "    \"wpt\": \"" << wptObj["wpt"].toString() << "\",\n"
+             << "    \"dist\": " << qRound(wptObj["dist"].toDouble()) << ",\n"
+             << "    \"lat\": " << QString::number(wptObj["lat"].toDouble(), 'f', m_coordinatePrecision) << ",\n";
 
         if (wptObj.contains("tpt")) {
-            json += QString("    \"lon\": %1,\n").arg(QString::number(wptObj["lon"].toDouble(), 'f', m_coordinatePrecision));
-            json += "    \"tpt\": [\n";
+            json << "    \"lon\": " << QString::number(wptObj["lon"].toDouble(), 'f', m_coordinatePrecision) << ",\n"
+                 << "    \"tpt\": [\n";
             QJsonArray tptArray = wptObj["tpt"].toArray();
             for (int j = 0; j < tptArray.size(); ++j) {
                 QJsonObject tptObj = tptArray[j].toObject();
-                json += "      {\n";
-                json += QString("        \"lat\": %1,\n").arg(QString::number(tptObj["lat"].toDouble(), 'f', m_coordinatePrecision));
-                json += QString("        \"lon\": %1,\n").arg(QString::number(tptObj["lon"].toDouble(), 'f', m_coordinatePrecision));
-                json += QString("        \"dist\": %1\n").arg(qRound(tptObj["dist"].toDouble()));
-                json += "      }";
-                if (j < tptArray.size() - 1) json += ",";
-                json += "\n";
+                json << "      {\n"
+                     << "        \"lat\": " << QString::number(tptObj["lat"].toDouble(), 'f', m_coordinatePrecision) << ",\n"
+                     << "        \"lon\": " << QString::number(tptObj["lon"].toDouble(), 'f', m_coordinatePrecision) << ",\n"
+                     << "        \"dist\": " << qRound(tptObj["dist"].toDouble()) << "\n"
+                     << "      }";
+                if (j < tptArray.size() - 1) json << ",";
+                json << "\n";
             }
-            json += "    ]\n";
+            json << "    ]\n";
         } else {
-            json += QString("    \"lon\": %1\n").arg(QString::number(wptObj["lon"].toDouble(), 'f', m_coordinatePrecision));
+            json << "    \"lon\": " << QString::number(wptObj["lon"].toDouble(), 'f', m_coordinatePrecision) << "\n";
         }
 
-        json += "  }";
-        if (i < m_currentPathJson.size() - 1) json += ",";
-        json += "\n";
+        json << "  }";
+        if (i < m_currentPathJson.size() - 1) json << ",";
+        json << "\n";
     }
-    json += "]\n";
-    return json;
+    json << "]\n";
+    return jsonOutput;
 }
 
 QStringList RouteModel::nodeNumbers() const {
     QStringList nodes;
-    for (const QJsonValue &val : m_currentPathJson) {
+    for (const auto &val : m_currentPathJson) {
         nodes.append(val.toObject()["wpt"].toString());
     }
     return nodes;
@@ -213,8 +161,7 @@ QStringList RouteModel::segmentDistances() const {
     for (int i = 0; i < m_currentPathJson.size() - 1; ++i) {
         QJsonObject obj = m_currentPathJson[i].toObject();
         if (obj.contains("dist")) {
-            double distMeters = obj["dist"].toDouble();
-            double distKm = distMeters / 1000.0;
+            double distKm = obj["dist"].toDouble() / 1000.0;
             distances.append(QString::number(distKm, 'f', 1) + " " + m_distanceUnit);
         } else {
             distances.append(m_missingDistanceFallback);
@@ -231,49 +178,61 @@ double RouteModel::getHaversineDistance(double lat1, double lon1, double lat2, d
                std::cos(qDegreesToRadians(lat1)) * std::cos(qDegreesToRadians(lat2)) *
                    std::sin(dLon / 2.0) * std::sin(dLon / 2.0);
 
-    double c = 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
-    return m_earthRadiusMeters * c;
+    return m_earthRadiusMeters * 2.0 * std::atan2(std::sqrt(a), std::sqrt(1.0 - a));
 }
 
 bool RouteModel::importFromGpx(const QString &fileName) {
     loadConfig();
 
+    emit statusMessage("Opening GPX File...");
+    emit progressUpdated(5);
+
     QFile file(fileName);
-    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) return false;
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        emit errorOccurred("Failed to open GPX file for reading.");
+        return false;
+    }
 
     QXmlStreamReader xml(&file);
     QStringList nodes;
     QList<QPair<double, double>> waypoints;
     QList<QPair<double, double>> trackPoints;
 
+    emit statusMessage("Parsing XML Elements...");
+    emit progressUpdated(15);
+
     while (!xml.atEnd() && !xml.hasError()) {
-        if (xml.readNext() == QXmlStreamReader::StartElement) {
-            QString name = xml.name().toString();
-            if (name == "wpt") {
-                waypoints.append({xml.attributes().value("lat").toDouble(),
-                                  xml.attributes().value("lon").toDouble()});
-                while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name().toString() == "wpt")) {
-                    if (xml.readNext() == QXmlStreamReader::StartElement && xml.name().toString() == "name") {
-                        nodes.append(xml.readElementText().trimmed());
-                    }
+        if (xml.readNext() != QXmlStreamReader::StartElement) continue;
+
+        QString name = xml.name().toString();
+        if (name == "wpt") {
+            waypoints.append({xml.attributes().value("lat").toDouble(),
+                              xml.attributes().value("lon").toDouble()});
+            while (!(xml.tokenType() == QXmlStreamReader::EndElement && xml.name().toString() == "wpt")) {
+                if (xml.readNext() == QXmlStreamReader::StartElement && xml.name().toString() == "name") {
+                    nodes.append(xml.readElementText().trimmed());
                 }
-            } else if (name == "trkpt") {
-                trackPoints.append({xml.attributes().value("lat").toDouble(),
-                                    xml.attributes().value("lon").toDouble()});
             }
+        } else if (name == "trkpt") {
+            trackPoints.append({xml.attributes().value("lat").toDouble(),
+                                xml.attributes().value("lon").toDouble()});
         }
     }
 
     if (waypoints.isEmpty()) {
-        if (trackPoints.isEmpty()) return false;
+        if (trackPoints.isEmpty()) {
+            emit errorOccurred("GPX file contains no valid waypoints or track points.");
+            return false;
+        }
+
+        emit statusMessage("Analyzing Track...");
+        emit progressUpdated(30);
 
         int wptCounter = m_startWaypointIndex;
-
         waypoints.append(trackPoints.first());
         nodes.append(QString::number(wptCounter++));
 
         int lastWptTrkIdx = 0;
-
         for (int i = 1; i < trackPoints.size() - 1; ++i) {
             int prevIdx = i - 1;
             while (prevIdx > 0 && getHaversineDistance(trackPoints[prevIdx].first, trackPoints[prevIdx].second,
@@ -292,9 +251,7 @@ bool RouteModel::importFromGpx(const QString &fileName) {
             double bOut = calculateBearing(trackPoints[i].first, trackPoints[i].second,
                                            trackPoints[nextIdx].first, trackPoints[nextIdx].second);
 
-            double angleTurn = calculateAngleDiff(bIn, bOut);
-
-            if (angleTurn >= m_turnAngleThreshold) {
+            if (calculateAngleDiff(bIn, bOut) >= m_turnAngleThreshold) {
                 double distFromLastWpt = getHaversineDistance(trackPoints[lastWptTrkIdx].first, trackPoints[lastWptTrkIdx].second,
                                                               trackPoints[i].first, trackPoints[i].second);
                 if (distFromLastWpt >= m_minDistBetweenWpts) {
@@ -310,6 +267,9 @@ bool RouteModel::importFromGpx(const QString &fileName) {
             nodes.append(QString::number(wptCounter++));
         }
     }
+
+    emit statusMessage("Computing Segments...");
+    emit progressUpdated(45);
 
     m_currentPathJson = QJsonArray();
     int trkIdx = 0;
@@ -336,10 +296,8 @@ bool RouteModel::importFromGpx(const QString &fileName) {
 
             double segmentDist = 0.0;
             for (int k = trkIdx; k < nextIdx && k < trackPoints.size() - 1; ++k) {
-                segmentDist += getHaversineDistance(
-                    trackPoints[k].first, trackPoints[k].second,
-                    trackPoints[k + 1].first, trackPoints[k + 1].second
-                    );
+                segmentDist += getHaversineDistance(trackPoints[k].first, trackPoints[k].second,
+                                                    trackPoints[k + 1].first, trackPoints[k + 1].second);
             }
             wptObj["dist"] = std::round(segmentDist);
 
@@ -348,17 +306,10 @@ bool RouteModel::importFromGpx(const QString &fileName) {
                 QJsonObject ptObj;
                 ptObj["lat"] = trackPoints[k].first;
                 ptObj["lon"] = trackPoints[k].second;
-
-                if (k < nextIdx && k < trackPoints.size() - 1) {
-                    double ptDist = getHaversineDistance(
-                        trackPoints[k].first, trackPoints[k].second,
-                        trackPoints[k + 1].first, trackPoints[k + 1].second
-                        );
-                    ptObj["dist"] = std::round(ptDist);
-                } else {
-                    ptObj["dist"] = 0.0;
-                }
-
+                double ptDist = (k < nextIdx && k < trackPoints.size() - 1) ?
+                                    getHaversineDistance(trackPoints[k].first, trackPoints[k].second,
+                                                         trackPoints[k + 1].first, trackPoints[k + 1].second) : 0.0;
+                ptObj["dist"] = std::round(ptDist);
                 segArray.append(ptObj);
             }
 
@@ -372,8 +323,14 @@ bool RouteModel::importFromGpx(const QString &fileName) {
     }
 
     if (m_autoSaveLogs) {
+        emit statusMessage("Saving Logs...");
+        emit progressUpdated(55);
         saveRouteLogs();
     }
+
+    emit statusMessage("Compiling Map..");
+    emit progressUpdated(65);
+    compileMapFromImportedGpx();
 
     return true;
 }
@@ -393,7 +350,7 @@ bool RouteModel::exportToGpx(const QString &fileName) const {
     xml.writeAttribute("creator", m_gpxCreator);
     xml.writeAttribute("xmlns", m_gpxXmlns);
 
-    for (const QJsonValue &val : m_currentPathJson) {
+    for (const auto &val : m_currentPathJson) {
         QJsonObject wptObj = val.toObject();
         xml.writeStartElement("wpt");
         xml.writeAttribute("lat", QString::number(wptObj["lat"].toDouble(), 'f', m_coordinatePrecision));
@@ -405,17 +362,17 @@ bool RouteModel::exportToGpx(const QString &fileName) const {
     xml.writeStartElement("trk");
     xml.writeStartElement("trkseg");
 
-    for (const QJsonValue &val : m_currentPathJson) {
+    for (const auto &val : m_currentPathJson) {
         QJsonObject wptObj = val.toObject();
-        if (wptObj.contains("tpt")) {
-            QJsonArray tptArray = wptObj["tpt"].toArray();
-            for (const QJsonValue &tptVal : tptArray) {
-                QJsonObject tptObj = tptVal.toObject();
-                xml.writeStartElement("trkpt");
-                xml.writeAttribute("lat", QString::number(tptObj["lat"].toDouble(), 'f', m_coordinatePrecision));
-                xml.writeAttribute("lon", QString::number(tptObj["lon"].toDouble(), 'f', m_coordinatePrecision));
-                xml.writeEndElement();
-            }
+        if (!wptObj.contains("tpt")) continue;
+
+        QJsonArray tptArray = wptObj["tpt"].toArray();
+        for (const auto &tptVal : tptArray) {
+            QJsonObject tptObj = tptVal.toObject();
+            xml.writeStartElement("trkpt");
+            xml.writeAttribute("lat", QString::number(tptObj["lat"].toDouble(), 'f', m_coordinatePrecision));
+            xml.writeAttribute("lon", QString::number(tptObj["lon"].toDouble(), 'f', m_coordinatePrecision));
+            xml.writeEndElement();
         }
     }
 
@@ -437,8 +394,58 @@ bool RouteModel::saveRouteLogs() const {
     QFile jsonFile(jsonPath);
     if (jsonFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
         jsonFile.write(toOrderedJsonString().toUtf8());
-        jsonFile.close();
     }
 
     return exportToGpx(gpxPath);
+}
+
+bool RouteModel::compileMapFromImportedGpx(bool buildings, bool green, bool water, bool railways) {
+    if (m_currentPathJson.isEmpty()) return false;
+
+    double minLat = 90.0, maxLat = -90.0;
+    double minLon = 180.0, maxLon = -180.0;
+
+    for (const auto &val : m_currentPathJson) {
+        QJsonObject wptObj = val.toObject();
+        minLat = qMin(minLat, wptObj["lat"].toDouble());
+        maxLat = qMax(maxLat, wptObj["lat"].toDouble());
+        minLon = qMin(minLon, wptObj["lon"].toDouble());
+        maxLon = qMax(maxLon, wptObj["lon"].toDouble());
+
+        if (!wptObj.contains("tpt")) continue;
+
+        QJsonArray tptArray = wptObj["tpt"].toArray();
+        for (const auto &tptVal : tptArray) {
+            QJsonObject tptObj = tptVal.toObject();
+            minLat = qMin(minLat, tptObj["lat"].toDouble());
+            maxLat = qMax(maxLat, tptObj["lat"].toDouble());
+            minLon = qMin(minLon, tptObj["lon"].toDouble());
+            maxLon = qMax(maxLon, tptObj["lon"].toDouble());
+        }
+    }
+
+    double padding = 0.005;
+    minLat -= padding; maxLat += padding;
+    minLon -= padding; maxLon += padding;
+
+    QJsonObject firstWpt = m_currentPathJson.first().toObject();
+    double originLat = firstWpt["lat"].toDouble();
+    double originLon = firstWpt["lon"].toDouble();
+
+    QString mapPath = QDir(QCoreApplication::applicationDirPath()).filePath(m_mapLogFilename);
+    auto *preprocessor = new MapPreprocessor(this);
+
+    connect(preprocessor, &MapPreprocessor::statusMessage, this, &RouteModel::statusMessage);
+    connect(preprocessor, &MapPreprocessor::progressUpdated, this, [this](int percent) {
+        emit progressUpdated(65 + (percent * 35) / 100);
+    });
+    connect(preprocessor, &MapPreprocessor::errorOccurred, this, &RouteModel::errorOccurred);
+    connect(preprocessor, &MapPreprocessor::downloadFinished, this, [this, preprocessor](bool success) {
+        preprocessor->deleteLater();
+        emit mapCompilationFinished(success);
+    });
+
+    preprocessor->downloadAndProcessCustomBounds(minLat, minLon, maxLat, maxLon, originLat, originLon, mapPath, buildings, green, water, railways);
+
+    return true;
 }

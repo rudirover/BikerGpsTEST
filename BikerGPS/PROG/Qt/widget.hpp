@@ -1,14 +1,12 @@
-#ifndef WIDGET_H
-#define WIDGET_H
+#pragma once
 
 #include <QWidget>
-#include "blecontroller.h"
-#include "routemodel.h"
+#include <QSettings>
+#include "blecontroller.hpp"
+#include "routemodel.hpp"
 
 QT_BEGIN_NAMESPACE
-namespace Ui {
-class Widget;
-}
+namespace Ui { class Widget; }
 class QWebEngineView;
 class QWebEngineDownloadRequest;
 QT_END_NAMESPACE
@@ -37,14 +35,13 @@ private:
     BleController *m_bleController;
     RouteModel *m_routeModel;
     QWebEngineView *m_webView;
-    QString m_currentFileName; // Stores the imported file name
+    QString m_currentFileName;
 
     void openWebUrl(const QString &urlStr);
     bool importGpxFile(const QString &fileName);
-    void addListItem(const QString &text, int row = -1);
+    void addListItem(const QString &text); // Removed unused 'row' parameter
     void applyStyles();
     void updateVisualList();
     void snapWebViewPosition();
+    QSettings loadSettings() const;
 };
-
-#endif // WIDGET_H

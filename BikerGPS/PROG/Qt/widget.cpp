@@ -1,4 +1,4 @@
-#include "widget.h"
+#include "widget.hpp"
 #include "ui_widget.h"
 
 #include <QHBoxLayout>
@@ -20,12 +20,15 @@
 #include <QWebEngineProfile>
 #include <QWebEngineDownloadRequest>
 
+QSettings Widget::loadSettings() const {
+    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
+    return QSettings(configPath, QSettings::IniFormat);
+}
+
 Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget) {
     ui->setupUi(this);
 
-    // Read application configuration
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
+    QSettings settings = loadSettings();
 
     int winWidth = settings.value("UI/WindowWidth", 256).toInt();
     int winHeight = settings.value("UI/WindowHeight", 880).toInt();
@@ -37,7 +40,6 @@ Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget) {
     m_bleController = new BleController(this);
     m_routeModel = new RouteModel(this);
 
-    // Web view configuration
     QString webUrl = settings.value("Web/MapViewerUrl", "https://www.fietsknooppunt.be/nl-be/").toString();
     QString webTitle = settings.value("Web/WindowTitle", "Fietsknooppunt Browser").toString();
     int webWidth = settings.value("Web/WindowWidth", 944).toInt();
@@ -48,8 +50,7 @@ Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget) {
     m_webView->setWindowTitle(webTitle);
     m_webView->resize(webWidth, webHeight);
 
-    QWebEngineProfile *profile = m_webView->page()->profile();
-    connect(profile, &QWebEngineProfile::downloadRequested, this, &Widget::handleDownload);
+    connect(m_webView->page()->profile(), &QWebEngineProfile::downloadRequested, this, &Widget::handleDownload);
 
     QProgressBar *progressBar = new QProgressBar(this);
     progressBar->setRange(0, 100);
@@ -73,18 +74,45 @@ Widget::Widget(QWidget *parent) : QWidget(parent), ui(new Ui::Widget) {
     this->setProperty("progressBar", QVariant::fromValue(progressBar));
     ui->verticalLayout_2->addWidget(progressBar);
 
+    connect(m_routeModel, &RouteModel::progressUpdated, this, [progressBar](int value) {
+        progressBar->setValue(value);
+    });
+
+    connect(m_routeModel, &RouteModel::statusMessage, this, [progressBar](const QString &statusText) {
+        progressBar->setFormat(statusText);
+    });
+
+    connect(m_routeModel, &RouteModel::errorOccurred, this, [this, progressBar](const QString &error) {
+        progressBar->setValue(0);
+        progressBar->setFormat("Error");
+        QMessageBox::critical(this, "Route Error", error);
+    });
+
     connect(m_bleController, &BleController::progressChanged, this, [progressBar](int value, const QString &statusText) {
         progressBar->setValue(value);
         progressBar->setFormat(statusText);
     });
 
     int resetDelay = settings.value("UI/ProgressResetDelayMs", 5000).toInt();
-    connect(m_bleController, &BleController::transmissionFinished, this, [this, progressBar, resetDelay](bool success) {
+    connect(m_bleController, &BleController::transmissionFinished, this, [this, progressBar, resetDelay](bool) {
         ui->btnSend->setEnabled(true);
         QTimer::singleShot(resetDelay, this, [progressBar]() {
             progressBar->setValue(0);
             progressBar->setFormat("Idle");
         });
+    });
+
+    ui->btnSend->setEnabled(false); // Disable by default until map is compiled
+
+    connect(m_routeModel, &RouteModel::mapCompilationFinished, this, [this](bool success) {
+        ui->btnSend->setEnabled(success);
+    });
+
+    // Also disable it immediately when a new import/compilation starts
+    connect(m_routeModel, &RouteModel::statusMessage, this, [this](const QString &text) {
+        if (text.contains("Parsing") || text.contains("Opening")) {
+            ui->btnSend->setEnabled(false);
+        }
     });
 
     applyStyles();
@@ -99,15 +127,13 @@ Widget::~Widget() {
 }
 
 void Widget::handleDownload(QWebEngineDownloadRequest *download) {
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
+    QSettings settings = loadSettings();
     QString filter = settings.value("UI/GpxDownloadFilter", "GPX Track (*.gpx);;All Files (*.*)").toString();
 
     QString defaultPath = QStandardPaths::writableLocation(QStandardPaths::DownloadLocation)
                           + "/" + download->suggestedFileName();
 
     QString savePath = QFileDialog::getSaveFileName(m_webView, "Save Downloaded Track Data", defaultPath, filter);
-
     if (savePath.isEmpty()) {
         download->cancel();
         return;
@@ -122,7 +148,7 @@ void Widget::handleDownload(QWebEngineDownloadRequest *download) {
 
     QProgressBar *progressBar = this->property("progressBar").value<QProgressBar*>();
     if (progressBar) {
-        progressBar->setFormat("Downloading map metadata...");
+        progressBar->setFormat("Downloading Metadata...");
         progressBar->setValue(40);
     }
 
@@ -132,7 +158,7 @@ void Widget::handleDownload(QWebEngineDownloadRequest *download) {
         if (download->state() == QWebEngineDownloadRequest::DownloadCompleted) {
             if (progressBar) {
                 progressBar->setValue(100);
-                progressBar->setFormat("Importing downloaded GPX...");
+                progressBar->setFormat("Importing Downloaded GPX...");
             }
             this->importGpxFile(fullDownloadedFilePath);
         } else if (download->state() == QWebEngineDownloadRequest::DownloadInterrupted) {
@@ -153,13 +179,12 @@ bool Widget::importGpxFile(const QString &fileName) {
         return false;
     }
 
-    // Save the file name (e.g., "route.gpx") for BLE transmission
+    m_routeModel->compileMapFromImportedGpx();
     m_currentFileName = QFileInfo(fileName).fileName();
 
     updateVisualList();
 
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
+    QSettings settings = loadSettings();
     int statusDelay = settings.value("UI/StatusMessageDelayMs", 3000).toInt();
 
     QProgressBar *progressBar = this->property("progressBar").value<QProgressBar*>();
@@ -175,29 +200,26 @@ bool Widget::importGpxFile(const QString &fileName) {
 }
 
 void Widget::on_btnImport_clicked() {
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
+    QSettings settings = loadSettings();
     QString filter = settings.value("UI/GpxOpenFilter", "GPX Files (*.gpx)").toString();
-
     QString fileName = QFileDialog::getOpenFileName(this, "Open Fietsnet GPX", "", filter);
     importGpxFile(fileName);
 }
 
 void Widget::snapWebViewPosition() {
-    if (m_webView && m_webView->isVisible()) {
-        QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-        QSettings settings(configPath, QSettings::IniFormat);
-        int snapOffset = settings.value("Web/SnapOffsetPx", 8).toInt();
+    if (!m_webView || !m_webView->isVisible()) return;
 
-        QRect mainFrame = this->frameGeometry();
-        QRect webFrame = m_webView->frameGeometry();
+    QSettings settings = loadSettings();
+    int snapOffset = settings.value("Web/SnapOffsetPx", 8).toInt();
 
-        int titleBarDelta = (this->geometry().y() - mainFrame.y()) - (m_webView->geometry().y() - webFrame.y());
-        int secondWindowX = mainFrame.x() + mainFrame.width() + snapOffset;
-        int secondWindowY = mainFrame.y() + titleBarDelta;
+    QRect mainFrame = this->frameGeometry();
+    QRect webFrame = m_webView->frameGeometry();
 
-        m_webView->move(secondWindowX, secondWindowY);
-    }
+    int titleBarDelta = (this->geometry().y() - mainFrame.y()) - (m_webView->geometry().y() - webFrame.y());
+    int secondWindowX = mainFrame.x() + mainFrame.width() + snapOffset;
+    int secondWindowY = mainFrame.y() + titleBarDelta;
+
+    m_webView->move(secondWindowX, secondWindowY);
 }
 
 void Widget::moveEvent(QMoveEvent *event) {
@@ -214,13 +236,25 @@ void Widget::updateVisualList() {
     ui->listWidget->clear();
     ui->listWidget->setUpdatesEnabled(false);
 
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
-
+    // Optimized: Load settings ONCE outside the loop to prevent massive disk I/O and lag
+    QSettings settings = loadSettings();
     QString separatorFormat = settings.value("UI/DistanceSeparatorFormat", "│  ▼  %1  ▼  │").toString();
     int itemWidth = settings.value("UI/ListItemWidth", 84).toInt();
+    int itemHeight = settings.value("UI/ListItemHeight", 84).toInt();
     int distanceItemHeight = settings.value("UI/DistanceItemHeight", 35).toInt();
     QString distanceTextColor = settings.value("UI/DistanceTextColor", "#10b981").toString();
+
+    int badgeSize = settings.value("UI/BadgeSize", 64).toInt();
+    QString badgeBgColor = settings.value("UI/BadgeBgColor", "#23232a").toString();
+    QString badgeBorderColor = settings.value("UI/BadgeBorderColor", "#10b981").toString();
+    QString badgeTextColor = settings.value("UI/BadgeTextColor", "#ffffff").toString();
+    int badgeBorderWidth = settings.value("UI/BadgeBorderWidth", 4).toInt();
+    int badgeFontSize = settings.value("UI/BadgeFontSize", 24).toInt();
+
+    int marginLeft = settings.value("UI/ContainerMarginLeft", 10).toInt();
+    int marginTop = settings.value("UI/ContainerMarginTop", 4).toInt();
+    int marginRight = settings.value("UI/ContainerMarginRight", 10).toInt();
+    int marginBottom = settings.value("UI/ContainerMarginBottom", 4).toInt();
 
     QStringList nodes = m_routeModel->nodeNumbers();
     QStringList distances = m_routeModel->segmentDistances();
@@ -255,34 +289,46 @@ void Widget::on_btnSend_clicked() {
 
     ui->btnSend->setEnabled(false);
 
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
-
+    QSettings settings = loadSettings();
     QString bleDeviceName = settings.value("Bluetooth/DeviceName", "BikerNetworkTool").toString();
     QString jsonLogFile = settings.value("Route/JsonLogFilename", "sent_route_log.json").toString();
+    QString mapLogFile = settings.value("Route/MapLogFilename", "sent_route_log.bma2").toString();
 
-    QString orderedJsonStr = m_routeModel->toOrderedJsonString();
-    QByteArray jsonData = orderedJsonStr.toUtf8();
-
-    qDebug().noquote() << "Sending Ordered JSON payload over BLE:\n" << orderedJsonStr;
-
-    QFile logFile(jsonLogFile);
-    if (logFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
-        logFile.write(jsonData);
-        logFile.close();
-        qDebug() << "Successfully logged sent configuration to" << jsonLogFile;
-    } else {
-        qWarning() << "Warning: Could not open or overwrite" << jsonLogFile << "file asset.";
+    // Extract base name from imported GPX file (e.g., "my_route.gpx" -> "my_route")
+    QString baseName = "sent_route_log";
+    if (!m_currentFileName.isEmpty()) {
+        baseName = QFileInfo(m_currentFileName).completeBaseName();
     }
 
-    // Pass the actual file name (or fallback to "default.json" if none was imported)[cite: 7]
-    QString fileNameToSend = m_currentFileName.isEmpty() ? "default.json" : m_currentFileName;
-    m_bleController->connectAndSend(bleDeviceName, fileNameToSend, jsonData);
+    // BLE metadata filenames use the GPX base name
+    QString jsonBleName = baseName + ".json";
+    QString mapBleName = baseName + ".bma2";
+
+    QList<BleFilePayload> filesToSend;
+
+    // Read local JSON file
+    QFile jsonFile(jsonLogFile);
+    if (jsonFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        filesToSend.append({jsonBleName, jsonFile.readAll()});
+    }
+
+    // Read local BMA2 map file
+    QFile mapFile(mapLogFile);
+    if (mapFile.open(QIODevice::ReadOnly)) {
+        filesToSend.append({mapBleName, mapFile.readAll()});
+    }
+
+    if (filesToSend.isEmpty()) {
+        QMessageBox::warning(this, "Error", "Could not find generated log files to send.");
+        ui->btnSend->setEnabled(true);
+        return;
+    }
+
+    m_bleController->connectAndSendFiles(bleDeviceName, filesToSend);
 }
 
-void Widget::addListItem(const QString &text, int row) {
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
+void Widget::addListItem(const QString &text) {
+    QSettings settings = loadSettings();
 
     int itemWidth = settings.value("UI/ListItemWidth", 84).toInt();
     int itemHeight = settings.value("UI/ListItemHeight", 84).toInt();
@@ -300,15 +346,11 @@ void Widget::addListItem(const QString &text, int row) {
 
     QListWidgetItem *item = new QListWidgetItem();
     item->setSizeHint(QSize(itemWidth, itemHeight));
+    ui->listWidget->addItem(item);
 
-    if (row >= 0) {
-        ui->listWidget->insertItem(row, item);
-    } else {
-        ui->listWidget->addItem(item);
-    }
-
-    QWidget *container = new QWidget();
-    QHBoxLayout *layout = new QHBoxLayout(container);
+    // Fixed: Removed the unmanaged memory leak from dead Widget allocation
+    QWidget *baseContainer = new QWidget();
+    QHBoxLayout *layout = new QHBoxLayout(baseContainer);
     layout->setContentsMargins(marginLeft, marginTop, marginRight, marginBottom);
     layout->addStretch();
 
@@ -333,7 +375,7 @@ void Widget::addListItem(const QString &text, int row) {
     layout->addWidget(circleBadge, 0, Qt::AlignCenter);
     layout->addStretch();
 
-    ui->listWidget->setItemWidget(item, container);
+    ui->listWidget->setItemWidget(item, baseContainer);
 }
 
 void Widget::applyStyles() {
@@ -382,8 +424,7 @@ void Widget::openWebUrl(const QString &urlStr) {
 }
 
 void Widget::on_btnOpen_clicked() {
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
+    QSettings settings = loadSettings();
     QString webUrl = settings.value("Web/MapViewerUrl", "https://www.fietsknooppunt.be/nl-be/").toString();
 
     if (m_webView->isVisible() && m_webView->url().toString() == webUrl) {
@@ -394,8 +435,7 @@ void Widget::on_btnOpen_clicked() {
 }
 
 void Widget::on_btnBunchies_clicked() {
-    QString configPath = QDir(QCoreApplication::applicationDirPath()).filePath("config.ini");
-    QSettings settings(configPath, QSettings::IniFormat);
+    QSettings settings = loadSettings();
     QString targetUrl = settings.value("Web/BunchiesUrl", "https://www.bunchies.cc").toString();
 
     if (m_webView->isVisible() && m_webView->url().toString() == targetUrl) {

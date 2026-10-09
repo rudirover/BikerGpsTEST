@@ -1,5 +1,4 @@
-#ifndef ROUTEMODEL_H
-#define ROUTEMODEL_H
+#pragma once
 
 #include <QObject>
 #include <QJsonArray>
@@ -7,6 +6,7 @@
 #include <QStringList>
 #include <QPair>
 #include <QString>
+#include "mappreprocessor.hpp"
 
 class RouteModel : public QObject
 {
@@ -29,6 +29,15 @@ public:
     bool exportToGpx(const QString &fileName) const;
     bool saveRouteLogs() const;
 
+    // Bounding Box compilation function using MapPreprocessor
+    bool compileMapFromImportedGpx(bool buildings = true, bool green = true, bool water = true, bool railways = true);
+
+signals:
+    void statusMessage(const QString &message);
+    void progressUpdated(int percentage);
+    void errorOccurred(const QString &error);
+    void mapCompilationFinished(bool success);
+
 private:
     QJsonArray m_currentPathJson;
 
@@ -41,6 +50,7 @@ private:
     double m_earthRadiusMeters = 6371000.0;
     QString m_jsonLogFilename = "sent_route_log.json";
     QString m_gpxLogFilename = "sent_route_log.gpx";
+    QString m_mapLogFilename = "sent_route_log.bma2";
     QString m_gpxCreator = "RouteModel";
     int m_startWaypointIndex = 1;
     QString m_gpxVersion = "1.1";
@@ -48,5 +58,3 @@ private:
     QString m_distanceUnit = "km";
     QString m_missingDistanceFallback = "?? km";
 };
-
-#endif // ROUTEMODEL_H

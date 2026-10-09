@@ -216,6 +216,7 @@ public:
     void run();
     void showNoRoute();
     void showReceiveRoute();
+    void showReceiveProgress(uint32_t receivedBytes, uint32_t totalBytes, const char* fileName);
     void showRoute();
     //void showMap();
     void fadeBackLight(uint8_t backLightLevel);
